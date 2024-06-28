@@ -3,12 +3,16 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class CameraRenderer
+public partial class CameraRenderer
 {
-    private const string bufferName = "Render Camera";
+    // https://docs.unity3d.com/Manual/SL-PassTags.html
+    private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+    
+   private const string bufferName = "Render Camera";
     private ScriptableRenderContext context;
     private Camera camera;
     private CommandBuffer buffer;
+    private CullingResults cullingResults;
 
     public CameraRenderer()
     {
@@ -22,9 +26,15 @@ public class CameraRenderer
         this.context = context;
         this.camera = camera;
 
+        // Cull和GPU无关
+        if (!Cull())
+            return;
+
         Setup();
 
-        DrawVisibleObject();
+        DrawVisibleObjects();
+        DrawUnsupportedShaders();
+        DrawGizmos();
 
         Submit();
     }
@@ -37,9 +47,22 @@ public class CameraRenderer
         ExecuteBuffer();
     }
 
-    private void DrawVisibleObject()
+    private void DrawVisibleObjects()
     {
+        var sortingSettings = new SortingSettings(camera)
+        {
+            criteria = SortingCriteria.CommonOpaque
+        };
+        var drawingSettings = new DrawingSettings(unlitShaderTagId, sortingSettings);
+        var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
+        context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
+
         context.DrawSkybox(camera);
+
+        sortingSettings.criteria = SortingCriteria.CommonTransparent;
+        drawingSettings.sortingSettings = sortingSettings;
+        filteringSettings.renderQueueRange = RenderQueueRange.transparent;
+        context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
     }
 
     private void Submit()
@@ -54,5 +77,16 @@ public class CameraRenderer
     {
         context.ExecuteCommandBuffer(buffer);
         buffer.Clear();
+    }
+
+    private bool Cull()
+    {
+        if (!camera.TryGetCullingParameters(out ScriptableCullingParameters parameters))
+        {
+            return false;
+        }
+
+        cullingResults = context.Cull(ref parameters);
+        return true;
     }
 }
