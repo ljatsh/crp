@@ -26,7 +26,10 @@ public partial class CameraRenderer
         this.context = context;
         this.camera = camera;
 
-        // Cull和GPU无关
+        PrepareBuffer();
+        PrepareForSceneWindow();
+
+        // Cull和GPU无关 TODO5 放在Setup后面, Profile很奇怪
         if (!Cull())
             return;
 
@@ -42,8 +45,11 @@ public partial class CameraRenderer
     private void Setup()
     {
         context.SetupCameraProperties(camera);
-        buffer.ClearRenderTarget(true, true, Color.clear);
-        buffer.BeginSample(bufferName);
+        CameraClearFlags flags = camera.clearFlags;
+        buffer.ClearRenderTarget(flags <= CameraClearFlags.Nothing,
+            flags <= CameraClearFlags.Color, // TODO4 y not flags == CameraClearFlags.Color
+            flags == CameraClearFlags.Color ? camera.backgroundColor.linear : Color.clear);
+        buffer.BeginSample(SamplerName);
         ExecuteBuffer();
     }
 
@@ -67,7 +73,7 @@ public partial class CameraRenderer
 
     private void Submit()
     {
-        buffer.EndSample(bufferName);
+        buffer.EndSample(SamplerName);
         ExecuteBuffer();
 
         context.Submit();

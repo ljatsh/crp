@@ -8,8 +8,16 @@ using UnityEngine.Rendering;
 
 public partial class CameraRenderer
 {
+    private partial void PrepareBuffer();
+    private partial void PrepareForSceneWindow();
     private partial void DrawGizmos();
     private partial void DrawUnsupportedShaders();
+
+#if UNITY_EDITOR
+    string SamplerName { get; set; }
+#else
+    const string SamplerName => bufferName;
+#endif
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     // https://docs.unity3d.com/Manual/shader-predefined-pass-tags-built-in.html
@@ -28,6 +36,21 @@ public partial class CameraRenderer
     };
 
     static Material errorMaterial;
+
+    private partial void PrepareBuffer()
+    {
+        buffer.name = SamplerName = camera.name;
+    }
+
+    private partial void PrepareForSceneWindow()
+    {
+        if (camera.cameraType == CameraType.SceneView)
+        {
+            // TODO3
+            ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
+        }
+    }
+
     private partial void DrawUnsupportedShaders()
     {
         if (errorMaterial == null)
