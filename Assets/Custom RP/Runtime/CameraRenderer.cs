@@ -63,7 +63,8 @@ public partial class CameraRenderer
         var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
         context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
 
-        context.DrawSkybox(camera);
+        if (camera.clearFlags == CameraClearFlags.Skybox)
+            context.DrawSkybox(camera);
 
         sortingSettings.criteria = SortingCriteria.CommonTransparent;
         drawingSettings.sortingSettings = sortingSettings;

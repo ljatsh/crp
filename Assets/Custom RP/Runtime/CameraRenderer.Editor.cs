@@ -8,18 +8,18 @@ using UnityEngine.Rendering;
 
 public partial class CameraRenderer
 {
-    private partial void PrepareBuffer();
-    private partial void PrepareForSceneWindow();
-    private partial void DrawGizmos();
-    private partial void DrawUnsupportedShaders();
+    partial void PrepareBuffer();
+    partial void PrepareForSceneWindow();
+    partial void DrawGizmos();
+    partial void DrawUnsupportedShaders();
 
 #if UNITY_EDITOR
     string SamplerName { get; set; }
 #else
-    const string SamplerName => bufferName;
+    string SamplerName => bufferName;
 #endif
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR
     // https://docs.unity3d.com/Manual/shader-predefined-pass-tags-built-in.html
     static ShaderTagId[] legacyShaderTagIds = {
         new ShaderTagId("Always"),
@@ -37,12 +37,12 @@ public partial class CameraRenderer
 
     static Material errorMaterial;
 
-    private partial void PrepareBuffer()
+    partial void PrepareBuffer()
     {
         buffer.name = SamplerName = camera.name;
     }
 
-    private partial void PrepareForSceneWindow()
+    partial void PrepareForSceneWindow()
     {
         if (camera.cameraType == CameraType.SceneView)
         {
@@ -51,7 +51,7 @@ public partial class CameraRenderer
         }
     }
 
-    private partial void DrawUnsupportedShaders()
+    partial void DrawUnsupportedShaders()
     {
         if (errorMaterial == null)
         {
@@ -71,7 +71,7 @@ public partial class CameraRenderer
         context.DrawRenderers(cullingResults, ref drawingSettings, ref filterSettings);
     }
 
-    private partial void DrawGizmos()
+    partial void DrawGizmos()
     {
         if (Handles.ShouldRenderGizmos())
         {
@@ -79,5 +79,5 @@ public partial class CameraRenderer
             context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
         }
     }
-#endif // UNITY_EDITOR || DEVELOPMENT_BUILD
+#endif // UNITY_EDITOR
 }
