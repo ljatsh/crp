@@ -26,6 +26,7 @@
 
 //https://www.reddit.com/r/Unity3D/comments/12gqxbc/undeclared_shader_defines/
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl" 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl" 
 
 #endif //CUSTOM_COMMON_INCLUDED

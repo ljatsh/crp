@@ -21,7 +21,7 @@ public partial class CameraRenderer
         };
     }
 
-    public void Render(ScriptableRenderContext context, Camera camera)
+    public void Render(ScriptableRenderContext context, Camera camera, bool enableDynamicBatching, bool useGPUInstancing)
     {
         this.context = context;
         this.camera = camera;
@@ -35,7 +35,7 @@ public partial class CameraRenderer
 
         Setup();
 
-        DrawVisibleObjects();
+        DrawVisibleObjects(enableDynamicBatching, useGPUInstancing);
         DrawUnsupportedShaders();
         DrawGizmos();
 
@@ -53,13 +53,17 @@ public partial class CameraRenderer
         ExecuteBuffer();
     }
 
-    private void DrawVisibleObjects()
+    private void DrawVisibleObjects(bool enableDynamicBatching, bool useGPUInstancing)
     {
         var sortingSettings = new SortingSettings(camera)
         {
             criteria = SortingCriteria.CommonOpaque
         };
-        var drawingSettings = new DrawingSettings(unlitShaderTagId, sortingSettings);
+        var drawingSettings = new DrawingSettings(unlitShaderTagId, sortingSettings)
+        {
+            enableDynamicBatching = enableDynamicBatching,
+            enableInstancing = useGPUInstancing
+        };
         var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
         context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
 
