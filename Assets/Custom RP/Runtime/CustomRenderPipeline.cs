@@ -1,5 +1,4 @@
 
-using UnityEditor.Rendering;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -20,6 +19,7 @@ public class CustomRenderPipeline : RenderPipeline
         // https://unity.com/cn/blog/engine-platform/srp-batcher-speed-up-your-rendering
         // https://docs.unity3d.com/Manual/SRPBatcher.html
         GraphicsSettings.useScriptableRenderPipelineBatching = useSRPBatcher;
+        GraphicsSettings.lightsUseLinearIntensity = true;
     }
     protected override void Render(ScriptableRenderContext context, Camera[] cameras)
     {

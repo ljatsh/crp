@@ -7,12 +7,15 @@ public partial class CameraRenderer
 {
     // https://docs.unity3d.com/Manual/SL-PassTags.html
     private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+    private static ShaderTagId litShaderTagId = new ShaderTagId("CustomLit");
     
-   private const string bufferName = "Render Camera";
+    private const string bufferName = "Render Camera";
     private ScriptableRenderContext context;
     private Camera camera;
     private CommandBuffer buffer;
     private CullingResults cullingResults;
+
+    private Lighting lighting = new Lighting();
 
     public CameraRenderer()
     {
@@ -34,6 +37,7 @@ public partial class CameraRenderer
             return;
 
         Setup();
+        lighting.Setup(context, cullingResults);
 
         DrawVisibleObjects(enableDynamicBatching, useGPUInstancing);
         DrawUnsupportedShaders();
@@ -64,6 +68,7 @@ public partial class CameraRenderer
             enableDynamicBatching = enableDynamicBatching,
             enableInstancing = useGPUInstancing
         };
+        drawingSettings.SetShaderPassName(1, litShaderTagId);
         var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
         context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
 
