@@ -8,9 +8,12 @@ public class PerObjectMaterialProperties : MonoBehaviour
 {
     static MaterialPropertyBlock block;
     static int baseColorId = Shader.PropertyToID("_BaseColor");
+    static int cutOffId = Shader.PropertyToID("_Cutoff");
 
     [SerializeField]
     Color baseColor = Color.white;
+    [SerializeField, Range(0f, 1f)]
+    float cutOff = 0.5f;
 
     void Awake()
     {
@@ -23,6 +26,7 @@ public class PerObjectMaterialProperties : MonoBehaviour
             block = new MaterialPropertyBlock();
 
         block.SetColor(baseColorId, baseColor);
+        block.SetFloat(cutOffId, cutOff);
         GetComponent<Renderer>().SetPropertyBlock(block);
     }
 }
