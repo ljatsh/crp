@@ -7,10 +7,11 @@ Shader "Custom RP/Lit"
         _Cutoff("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
         _Metallic("Metallic", Range(0, 1)) = 0
         _Smoothness("Smoothness", Range(0, 1)) = 0.5
-        [Toggle(_CLIPPING)] _Clippig("Alpha Clipping", Float) = 0
+        [Toggle(_CLIPPING)] _Clipping("Alpha Clipping", Float) = 0
         [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1
         [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 0
         [Enum(Off, 0, On, 1)] _ZWrite("Z Write", Float) = 1
+        [Toggle(_PREMULTIPLY_ALPHA)] _PremulAlpha ("Premultiply Alpha", Float) = 0
     }
 
     SubShader
@@ -28,6 +29,7 @@ Shader "Custom RP/Lit"
             #pragma target 3.5 // https://docs.unity3d.com/Manual/SL-ShaderCompileTargets.html
 
             #pragma shader_feature _CLIPPING
+            #pragma shader_feature _PREMULTIPLY_ALPH
             // define UNITY_ASSUME_UNIFORM_SCALING
             // https://docs.unity3d.com/Manual/gpu-instancing-shader.html
             // #pragma instancing_options assumeuniformscaling
@@ -39,4 +41,6 @@ Shader "Custom RP/Lit"
             ENDHLSL
         }
     }
+
+    CustomEditor "CustomShaderGUI"
 }
