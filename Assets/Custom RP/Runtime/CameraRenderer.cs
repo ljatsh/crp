@@ -1,6 +1,7 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Animations;
 using UnityEngine.Rendering;
 
 public partial class CameraRenderer
@@ -24,7 +25,7 @@ public partial class CameraRenderer
         };
     }
 
-    public void Render(ScriptableRenderContext context, Camera camera, bool enableDynamicBatching, bool useGPUInstancing)
+    public void Render(ScriptableRenderContext context, Camera camera, bool enableDynamicBatching, bool useGPUInstancing, ShadowSettings shadowSettings)
     {
         this.context = context;
         this.camera = camera;
@@ -33,16 +34,20 @@ public partial class CameraRenderer
         PrepareForSceneWindow();
 
         // Cull和GPU无关 TODO5 放在Setup后面, Profile很奇怪
-        if (!Cull())
+        if (!Cull(shadowSettings.maxDistance))
             return;
 
+        buffer.BeginSample(SamplerName);
+        ExecuteBuffer();
+        lighting.Setup(context, cullingResults, shadowSettings);
+        buffer.EndSample(SamplerName);
         Setup();
-        lighting.Setup(context, cullingResults);
 
         DrawVisibleObjects(enableDynamicBatching, useGPUInstancing);
         DrawUnsupportedShaders();
         DrawGizmos();
 
+        lighting.Cleanup();
         Submit();
     }
 
@@ -95,13 +100,14 @@ public partial class CameraRenderer
         buffer.Clear();
     }
 
-    private bool Cull()
+    private bool Cull(float maxShadowDistance)
     {
         if (!camera.TryGetCullingParameters(out ScriptableCullingParameters parameters))
         {
             return false;
         }
 
+        parameters.shadowDistance = Mathf.Min(maxShadowDistance, camera.farClipPlane);
         cullingResults = context.Cull(ref parameters);
         return true;
     }

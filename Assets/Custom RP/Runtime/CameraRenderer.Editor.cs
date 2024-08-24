@@ -26,7 +26,7 @@ public partial class CameraRenderer
         new ShaderTagId("ForwardBase"),
         new ShaderTagId("ForwardAdd"),
         new ShaderTagId("Deferred"),
-        new ShaderTagId("ShadowCaster"),
+        //new ShaderTagId("ShadowCaster"),
         // TODO1 打开绘制失效
         //new ShaderTagId("MotionVectors"),
         new ShaderTagId("Vertex"),

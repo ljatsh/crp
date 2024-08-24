@@ -1,5 +1,4 @@
 
-using System.Security.Cryptography;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -23,23 +22,32 @@ public class Lighting
     };
 
     CullingResults cullingResults;
+    Shadows shadows = new Shadows();
 
-    public void Setup(ScriptableRenderContext context, CullingResults cullingResults)
+    public void Setup(ScriptableRenderContext context, CullingResults cullingResults, ShadowSettings shadowSettings)
     {
         this.cullingResults = cullingResults;
 
         buffer.BeginSample(bufferName);
+        shadows.Setup(context, cullingResults, shadowSettings);
         SetupLight();
+        shadows.Render();
         buffer.EndSample(bufferName);
 
         context.ExecuteCommandBuffer(buffer);
         buffer.Clear();
     }
 
-    void SetupDirectionalLight(int index, ref VisibleLight light)
+    public void Cleanup()
     {
-        dirLightColors[index] = light.finalColor;
-        dirLightDirections[index] = -light.localToWorldMatrix.GetColumn(2);
+        shadows.Cleanup();
+    }
+
+    void SetupDirectionalLight(int index, ref VisibleLight visibleLight)
+    {
+        dirLightColors[index] = visibleLight.finalColor;
+        dirLightDirections[index] = -visibleLight.localToWorldMatrix.GetColumn(2);
+        shadows.ReserveDirectionalShadows(visibleLight.light, index);
     }
 
     void SetupLight()

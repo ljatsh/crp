@@ -1,6 +1,4 @@
 
-using System.Drawing.Drawing2D;
-using System.Linq.Expressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -62,6 +60,10 @@ public class CustomShaderGUI : ShaderGUI
         if (SetProperty(name, enabled ? 1f : 0f))
             SetKeyword(keyword, enabled);
     }
+
+    bool HasProperty(string name) => FindProperty(name, properties, false) != null;
+
+    bool HasPremultiplyAlpha => HasProperty("_PremulAlpha");
 
     bool Clipping {
         set => SetProperty("_Clipping", "_CLIPPING", value);
@@ -141,7 +143,7 @@ public class CustomShaderGUI : ShaderGUI
 
     void TransparentPreset()
     {
-        if (PresetButton("Transparent"))
+        if (HasPremultiplyAlpha && PresetButton("Transparent"))
         {
             Clipping = false;
             PremultiplyAlpha = true;
