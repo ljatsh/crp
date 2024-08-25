@@ -9,6 +9,7 @@ struct Surface {
     float alpha;
     float metallic;
     float smoothness;
+    float3 positionWS;
 };
 
 #endif //CUSTOM_SURFACE_INCLUDED

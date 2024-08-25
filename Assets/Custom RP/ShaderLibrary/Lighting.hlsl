@@ -3,18 +3,22 @@
 #define CUSTOM_LIGHTING_INCLUDED
 
 float3 IncommingLight(Surface surface, Light light) {
-    return saturate(dot(surface.normal, light.direction) * light.color);
+    return saturate(dot(surface.normal, light.direction) * light.attenuation) * light.color;
 }
 
 float3 GetLighting(Surface surface, BRDF brdf, Light light) {
     return IncommingLight(surface, light) * DirectBRDF(surface, brdf, light);
 }
 
-float3 GetLighting(Surface surface, BRDF brdf) {
+float3 GetLighting(Surface surfaceWS, BRDF brdf) {
     float3 color = 0.0;
 
     for (int i=0; i<GetDirectinalLightCount(); i++) {
-        color += GetLighting(surface, brdf, GetDirectionalLight(i));
+        color += GetLighting(surfaceWS, brdf, GetDirectionalLight(i, surfaceWS));
+
+        // DirectionalShaodowsData data = GetDirectinalShadowData(i);
+        // float3 p = GetDirectionalShadowUV_Debug(data, surfaceWS);
+        // color += float3(p.x, p.y, p.z);
     }
 
     return color;
