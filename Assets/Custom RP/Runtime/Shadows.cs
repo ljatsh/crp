@@ -12,11 +12,16 @@ public class Shadows
 
     const string bufferName = "Shadows";
     const int maxShadowedDirectionalLightCount = 4;
+    const int maxCascades = 4;
 
     static int dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas");
     static int dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices");
+    static int cascadeCountId = Shader.PropertyToID("_CascadeCount");
+    static int cascadeCullingSphereId = Shader.PropertyToID("_CascadeCullingSpheres");  // TODO 未做了解
+    static int shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
 
-    static Matrix4x4[] dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount];
+    static Matrix4x4[] dirShadowMatrices = new Matrix4x4[maxShadowedDirectionalLightCount * maxCascades];
+    static Vector4[] cascadeCullingSphere = new Vector4[maxCascades];
 
     CommandBuffer buffer = new CommandBuffer()
     {
@@ -52,7 +57,7 @@ public class Shadows
 
         shadowedDirectionalLights[shadowedDirectionalLightCount].visibleLightIndex = visibleLightIndex;
 
-        return new Vector2(light.shadowStrength, shadowedDirectionalLightCount++);
+        return new Vector2(light.shadowStrength, settings.directional.cascadeCount * shadowedDirectionalLightCount++);
     }
 
     public void Render()
@@ -90,7 +95,8 @@ public class Shadows
         buffer.BeginSample(bufferName);
         ExecuteBuffer();
 
-        int split = shadowedDirectionalLightCount <= 1 ? 1 : 2;
+        int tiles = shadowedDirectionalLightCount * settings.directional.cascadeCount;
+        int split = tiles <= 1 ? 1 : tiles <= 4 ? 2 : 4;
         int tileSize = atlasSize / split;
 
         for (int i=0; i<shadowedDirectionalLightCount; i++)
@@ -98,7 +104,15 @@ public class Shadows
             RenderDirectionalShadows(i, split, tileSize);
         }
 
+        buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);
+        buffer.SetGlobalVectorArray(cascadeCullingSphereId, cascadeCullingSphere);
         buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
+
+        float f = 1f - settings.directional.cascadeFade;
+        buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(
+            1 / settings.maxDistance,
+            1 / settings.distanceFade,
+            1 / (1f - f * f)));
 
         buffer.EndSample(bufferName);
         ExecuteBuffer();
@@ -111,17 +125,31 @@ public class Shadows
             cullingResults, light.visibleLightIndex,
             BatchCullingProjectionType.Orthographic
         );
-        cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
-            light.visibleLightIndex, 0, 1, Vector3.zero, tileSize, 0f,
-            out Matrix4x4 viewMatrix, out Matrix4x4 projMatrix, out ShadowSplitData shadowSplitData
-        );
-        shadowSettings.splitData = shadowSplitData;
-        dirShadowMatrices[index] = ConvertToAtlasMatrix(projMatrix, viewMatrix,
-            SetTileViewPort(index, split, tileSize), split);
-        buffer.SetViewProjectionMatrices(viewMatrix, projMatrix);
+        int cascadeCount = settings.directional.cascadeCount;
+        int tileOffset = index * cascadeCount;
+        Vector3 ratios = settings.directional.CascadeRatios;
 
-        ExecuteBuffer();
-        context.DrawShadows(ref shadowSettings);
+        for (int i=0; i<cascadeCount; i++)
+        {
+            cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
+                light.visibleLightIndex, i, cascadeCount, ratios, tileSize, 0f,
+                out Matrix4x4 viewMatrix, out Matrix4x4 projMatrix, out ShadowSplitData shadowSplitData
+            );
+            shadowSettings.splitData = shadowSplitData;
+            if (index == 0)
+            {
+                Vector4 cullingSphere = shadowSplitData.cullingSphere;
+                cullingSphere.w *= cullingSphere.w;
+                cascadeCullingSphere[i] = cullingSphere;
+            }
+            int tileIndex = tileOffset + i;
+            dirShadowMatrices[tileIndex] = ConvertToAtlasMatrix(projMatrix, viewMatrix,
+                SetTileViewPort(tileIndex, split, tileSize), split);
+            buffer.SetViewProjectionMatrices(viewMatrix, projMatrix);
+
+            ExecuteBuffer();
+            context.DrawShadows(ref shadowSettings);
+        }
     }
 
     private Vector2 SetTileViewPort(int index, int split, float tileSize)
