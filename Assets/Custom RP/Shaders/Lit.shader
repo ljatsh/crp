@@ -30,6 +30,7 @@ Shader "Custom RP/Lit"
 
             #pragma shader_feature _CLIPPING
             #pragma shader_feature _PREMULTIPLY_ALPH
+            #pragma multi_compile _ _DIRECTIONAL_PCF3 _DIRECTIONAL_PCF5 _DIRECTIONAL_PCF7 // keyword放在第一个pass声明
             // define UNITY_ASSUME_UNIFORM_SCALING
             // https://docs.unity3d.com/Manual/gpu-instancing-shader.html
             // #pragma instancing_options assumeuniformscaling

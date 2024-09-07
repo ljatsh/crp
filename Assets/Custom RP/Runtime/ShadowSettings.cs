@@ -15,10 +15,17 @@ public class ShadowSettings
         _8192 = 8192
     };
 
+    public enum FilterMode
+    {
+        PCF2X2, PCF3X3, PCF5X5, PCF7X7
+    }
+
     [System.Serializable]
     public struct Directional
     {
         public TextureSize atlasSize;
+
+        public FilterMode filter;
 
         [Range(1, 4)]
         public int cascadeCount;
@@ -42,6 +49,7 @@ public class ShadowSettings
 
     public Directional directional = new Directional{
         atlasSize = TextureSize._1024,
+        filter = FilterMode.PCF2X2,
         cascadeCount = 4,
         cascadeRatio1 = 0.1f,
         cascadeRatio2 = 0.25f,

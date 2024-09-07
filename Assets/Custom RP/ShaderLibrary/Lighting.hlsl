@@ -18,7 +18,7 @@ float3 GetLighting(Surface surfaceWS, BRDF brdf) {
         color += GetLighting(surfaceWS, brdf, GetDirectionalLight(i, surfaceWS, shadowData));
 
         // DirectionalShadowData data = GetDirectinalShadowData(i);
-        // float3 p = GetDirectionalShadowUV_Debug(data, surfaceWS);
+        // float3 p = GetDirectionalShadowUV_Debug(data, shadowData, surfaceWS);
         // color += float3(p.x, p.y, p.z);
     }
 
