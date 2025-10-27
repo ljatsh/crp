@@ -4,13 +4,14 @@ using UnityEngine.Rendering;
 
 
 // TODO Blending Cascades
+// Transparent Caster
 public class Shadows
 {
     struct ShadowedDirectionalLight
     {
         public int visibleLightIndex;
         public float slopeScaleBias;
-        public float nearPlanOffset;
+        public float nearPlaneOffset;
     };
 
     const string bufferName = "Shadows";
@@ -69,7 +70,7 @@ public class Shadows
         {
             visibleLightIndex = visibleLightIndex,
             slopeScaleBias = light.shadowBias,
-            nearPlanOffset = light.shadowNearPlane
+            nearPlaneOffset = light.shadowNearPlane
         };
 
         return new Vector3(
@@ -155,7 +156,7 @@ public class Shadows
         for (int i=0; i<cascadeCount; i++)
         {
             cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
-                light.visibleLightIndex, i, cascadeCount, ratios, tileSize, light.nearPlanOffset,
+                light.visibleLightIndex, i, cascadeCount, ratios, tileSize, light.nearPlaneOffset,
                 out Matrix4x4 viewMatrix, out Matrix4x4 projMatrix, out ShadowSplitData shadowSplitData
             );
             shadowSettings.splitData = shadowSplitData;
