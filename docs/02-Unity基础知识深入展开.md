@@ -14,7 +14,9 @@
   - [2.2 LightMode 标签系统](#22-lightmode-标签系统)
   - [2.3 SRPDefaultUnlit 默认行为](#23-srpdefaultunlit-默认行为)
   - [2.4 传统内置管线的标签](#24-传统内置管线的标签)
-  - [2.5 RenderType 标签的作用](#25-rendertype-标签的作用)
+  - [2.5 Shader 和 SubShader 的选择机制](#25-shader-和-subshader-的选择机制)
+  - [2.6 RenderType 标签的作用](#26-rendertype-标签的作用)
+  - [2.7 Shader LOD（细节层次）](#27-shader-lod细节层次)
 - [3. 材质系统深入](#3-材质系统深入)
   - [3.1 Material 资源 vs MaterialInstance](#31-material-资源-vs-materialinstance)
   - [3.2 MaterialPropertyBlock 和 PerRendererData](#32-materialpropertyblock-和-perrendererdata)
@@ -337,7 +339,161 @@ Pass
 
 使用 `overrideMaterial` 将所有不支持的着色器替换为错误材质（粉红色），便于在编辑器中识别问题。
 
-### 2.5 RenderType 标签的作用
+### 2.5 Shader 和 SubShader 的选择机制
+
+当渲染一个物体时，Unity 需要从 Shader Object 中选择合适的 SubShader 和 Pass。理解这个选择机制对于调试着色器问题和优化渲染性能至关重要。
+
+**Shader Object 的结构：**
+
+```text
+Shader "Custom/MyShader"          // Shader Object
+├─ SubShader 0                    // 第一个 SubShader（最高优先级）
+│  ├─ Pass 0
+│  ├─ Pass 1
+│  └─ ...
+├─ SubShader 1                    // 第二个 SubShader（备选）
+│  ├─ Pass 0
+│  └─ ...
+├─ SubShader 2                    // 第三个 SubShader（备选）
+│  └─ ...
+└─ Fallback "Legacy Shaders/Diffuse"  // 如果所有 SubShader 都不兼容
+   └─ SubShader 0                 // Fallback Shader 的 SubShader
+```
+
+**Unity 选择 SubShader 的过程：**
+
+根据 [Unity 官方文档](https://docs.unity3d.com/Manual/shader-loading.html#selecting-subshaders)，Unity 按照以下步骤选择 SubShader：
+
+**第一步：检查兼容性**
+
+Unity 会检查每个 SubShader 是否兼容：
+1. **平台硬件**：GPU 能力、特性级别
+2. **Shader LOD**：当前设置的 Shader 细节层次
+3. **渲染管线**：是否与当前使用的渲染管线兼容
+
+**第二步：按顺序搜索**
+
+Unity 按照以下顺序搜索兼容的 SubShader：
+
+```text
+1. 当前 Shader 的 SubShader（按在 Shader 中的顺序）
+   ├─ SubShader 0 → 检查兼容性
+   ├─ SubShader 1 → 检查兼容性（如果 SubShader 0 不兼容）
+   ├─ SubShader 2 → 检查兼容性（如果前面的都不兼容）
+   └─ ...
+
+2. Fallback Shader 的 SubShader（如果当前 Shader 没有兼容的）
+   └─ Fallback Shader 中的 SubShader（按顺序）
+```
+
+**第三步：选择第一个兼容的 SubShader**
+
+Unity 选择**第一个**兼容的 SubShader，然后在该 SubShader 中选择合适的 Pass。
+
+**实际示例：**
+
+```shader
+Shader "Custom/ExampleShader"
+{
+    // SubShader 0：针对现代 GPU（SRP 兼容）
+    SubShader
+    {
+        Tags { "RenderPipeline"="UniversalRenderPipeline" }
+        Pass
+        {
+            Tags { "LightMode"="SRPDefaultUnlit" }
+            // ...
+        }
+    }
+    
+    // SubShader 1：针对旧 GPU（内置管线兼容）
+    SubShader
+    {
+        Tags { "RenderPipeline"="" }  // 内置管线
+        Pass
+        {
+            Tags { "LightMode"="ForwardBase" }
+            // ...
+        }
+    }
+    
+    // Fallback：如果都不兼容，使用这个
+    Fallback "Legacy Shaders/Diffuse"
+}
+```
+
+**在不同渲染管线中的选择：**
+
+| 渲染管线 | 选择的 SubShader | 原因 |
+|---------|----------------|------|
+| URP/SRP | SubShader 0 | `RenderPipeline="UniversalRenderPipeline"` 标签匹配 |
+| 内置管线 | SubShader 1 | SubShader 0 不兼容（URP 标签），选择 SubShader 1 |
+| 不兼容的平台 | Fallback Shader | 所有 SubShader 都不兼容 |
+
+**Pass 的选择：**
+
+选择了 SubShader 后，Unity 会根据 `DrawingSettings` 中的 `ShaderTagId` 选择 Pass：
+
+```csharp
+// 在当前项目中
+var drawingSettings = new DrawingSettings(
+    new ShaderTagId("SRPDefaultUnlit"),  // 指定要使用的 Pass 标签
+    sortingSettings
+);
+```
+
+Unity 会：
+1. 在选定的 SubShader 中搜索带有 `LightMode="SRPDefaultUnlit"` 标签的 Pass
+2. 如果找到，使用该 Pass
+3. 如果没找到，尝试使用 SubShader 中的第一个 Pass（如果未声明 LightMode，会被视为 SRPDefaultUnlit）
+
+**Shader LOD 的影响：**
+
+Shader LOD（Level of Detail）会影响 SubShader 的选择。Unity 会根据当前的 LOD 值过滤掉 LOD 值过高的 SubShader。关于 LOD 的详细说明，请参考 [2.7 Shader LOD（细节层次）](#27-shader-lod细节层次)。
+
+**调试技巧：**
+
+1. **Frame Debugger**：查看实际使用的 Shader 和 Pass
+2. **Shader Inspector**：在 Unity 编辑器中查看编译后的 Shader 变体
+3. **Profiler 标记**：
+   - `Shader.ParseThreaded`：多线程解析 Shader
+   - `Shader.ParseMainThread`：主线程解析 Shader
+   - `Shader.MainThreadCleanup`：清理 Shader 变体
+
+**常见问题：**
+
+1. **物体显示为粉红色**：
+   - 说明没有找到兼容的 SubShader
+   - 检查 SubShader 的 Tags 是否与渲染管线匹配
+   - 检查 GPU 能力是否支持
+
+2. **使用了错误的 SubShader**：
+   - 检查 SubShader 的顺序（Unity 选择第一个兼容的）
+   - 检查 Shader LOD 设置
+
+3. **Fallback 被使用**：
+   - 说明当前 Shader 的所有 SubShader 都不兼容
+   - 考虑添加更通用的 SubShader 或调整 Tags
+
+**最佳实践：**
+
+1. **提供多个 SubShader**：为不同的平台和渲染管线提供兼容的 SubShader
+2. **合理排序**：将最常用、最兼容的 SubShader 放在前面
+3. **使用 Fallback**：始终提供 Fallback Shader 作为最后备选
+4. **明确标签**：为每个 SubShader 明确设置 `RenderPipeline` 等标签
+
+**在当前项目中的应用：**
+
+```9:9:Assets/Custom RP/Runtime/CameraRenderer.cs
+    private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+```
+
+这告诉渲染管线只渲染带有 `SRPDefaultUnlit` 标签的 Pass。因此：
+- 物体使用的 Shader 必须有一个 SubShader 与自定义渲染管线兼容
+- 该 SubShader 中必须有一个 Pass 带有 `LightMode="SRPDefaultUnlit"` 标签（或未声明 LightMode）
+- 如果不符合条件，物体会在编辑器中显示为粉红色（如果实现了 `DrawUnsupportedShaders`）
+
+### 2.6 RenderType 标签的作用
 
 `RenderType` 标签用于对对象进行分类，通常用于后处理或替换着色器：
 
@@ -358,6 +514,195 @@ Tags {
 - 后处理系统可以根据 `RenderType` 选择不同的处理方式
 - 替换着色器（Replacement Shaders）可以根据 `RenderType` 替换着色器
 
+### 2.7 Shader LOD（细节层次）
+
+Shader LOD（Level of Detail）是一种优化技术，允许 Unity 根据当前设置自动选择不同复杂度的 SubShader。这类似于 3D 模型的 LOD，但应用于着色器。
+
+**设计目的：**
+
+根据 [Unity 官方文档](https://docs.unity3d.com/Manual/SL-ShaderLOD.html)，Shader LOD 的设计目的是：
+
+1. **性能优化**：在低端设备或需要性能优化的场景中，自动使用简化版本的着色器
+2. **质量分级**：为不同性能需求的场景提供不同质量的着色器变体
+3. **自动降级**：无需手动切换材质，Unity 会根据全局 LOD 设置自动选择合适的 SubShader
+4. **节省资源**：避免在低端设备上使用过于复杂的着色器，减少 GPU 负担
+
+**使用方式：**
+
+在 ShaderLab 中，通过 `LOD` 指令为 SubShader 分配 LOD 值：
+
+```shader
+Shader "Custom/MyShader"
+{
+    // SubShader 0：高质量（LOD 300）
+    SubShader
+    {
+        LOD 300
+        Pass
+        {
+            // 复杂的着色器代码（法线贴图、高光等）
+        }
+    }
+    
+    // SubShader 1：中等质量（LOD 200）
+    SubShader
+    {
+        LOD 200
+        Pass
+        {
+            // 中等复杂度的着色器代码
+        }
+    }
+    
+    // SubShader 2：低质量（LOD 100）
+    SubShader
+    {
+        LOD 100
+        Pass
+        {
+            // 简化的着色器代码（无光照、基础纹理）
+        }
+    }
+}
+```
+
+**LOD 值的选择：**
+
+Unity 内置着色器的 LOD 值参考：
+
+| LOD 值 | 内置着色器示例 |
+|--------|---------------|
+| 100 | Unlit/Texture, Unlit/Color, Unlit/Transparent |
+| 300 | Standard, Standard (Specular Setup) |
+
+传统着色器的 LOD 值：
+
+| LOD 值 | 传统着色器示例 |
+|--------|---------------|
+| 100 | VertexLit |
+| 200 | Diffuse |
+| 300 | Bumped, Specular |
+| 400-600 | Bumped Specular, Parallax 等高级特性 |
+
+**设置全局 LOD：**
+
+可以通过代码设置全局 Shader LOD：
+
+```csharp
+// 设置全局最大 LOD（所有 Shader 的 LOD 上限）
+Shader.globalMaximumLOD = 200;
+
+// 设置特定 Shader 的 LOD
+Shader shader = Shader.Find("Custom/MyShader");
+shader.maximumLOD = 300;
+```
+
+**LOD 的工作原理：**
+
+```text
+渲染物体时：
+1. Unity 获取当前全局 LOD 值（例如 200）
+2. 遍历 Shader 的 SubShader（按顺序）
+3. 对于每个 SubShader：
+   - 检查 SubShader 的 LOD 值
+   - 如果 SubShader.LOD > 当前全局 LOD，跳过此 SubShader
+   - 如果 SubShader.LOD <= 当前全局 LOD，检查兼容性
+4. 选择第一个兼容且 LOD 值合适的 SubShader
+```
+
+**实际示例：**
+
+```shader
+Shader "Custom/AdaptiveShader"
+{
+    // 高质量版本：适用于高端设备
+    SubShader
+    {
+        LOD 400
+        Tags { "RenderPipeline"="UniversalRenderPipeline" }
+        Pass
+        {
+            // 包含法线贴图、高光、阴影等完整功能
+        }
+    }
+    
+    // 中质量版本：适用于中端设备
+    SubShader
+    {
+        LOD 200
+        Tags { "RenderPipeline"="UniversalRenderPipeline" }
+        Pass
+        {
+            // 基础光照，无法线贴图
+        }
+    }
+    
+    // 低质量版本：适用于低端设备或性能优化场景
+    SubShader
+    {
+        LOD 100
+        Tags { "RenderPipeline"="UniversalRenderPipeline" }
+        Pass
+        {
+            // 最简单的无光照着色器
+        }
+    }
+    
+    Fallback "Universal Render Pipeline/Unlit"
+}
+```
+
+**在不同 LOD 设置下的表现：**
+
+| 全局 LOD | 选择的 SubShader | 说明 |
+|---------|----------------|------|
+| 400 | SubShader 0 (LOD 400) | 使用最高质量版本 |
+| 200 | SubShader 1 (LOD 200) | 使用中等质量版本（LOD 400 的被跳过） |
+| 100 | SubShader 2 (LOD 100) | 使用低质量版本（前两个被跳过） |
+| 50 | Fallback Shader | 所有 SubShader 的 LOD 都太高，使用 Fallback |
+
+**应用场景：**
+
+1. **移动设备优化**：
+   ```csharp
+   #if UNITY_ANDROID || UNITY_IOS
+       Shader.globalMaximumLOD = 200;  // 移动设备使用中等质量
+   #else
+       Shader.globalMaximumLOD = 400;  // PC 使用高质量
+   #endif
+   ```
+
+2. **性能模式**：
+   ```csharp
+   // 用户选择"性能模式"
+   if (qualitySettings == QualityLevel.Low) {
+       Shader.globalMaximumLOD = 100;  // 使用低质量着色器
+   }
+   ```
+
+3. **距离降级**：
+   ```csharp
+   // 根据相机距离自动降级（需要自定义实现）
+   float distance = Vector3.Distance(camera.transform.position, objectPosition);
+   if (distance > 100) {
+       Shader.globalMaximumLOD = 100;  // 远距离使用简化着色器
+   }
+   ```
+
+**最佳实践：**
+
+1. **合理设置 LOD 值**：参考 Unity 内置着色器的 LOD 值，保持一致性
+2. **提供多个 LOD 级别**：至少提供高质量和低质量两个版本
+3. **保持视觉一致性**：不同 LOD 级别应该看起来相似，只是复杂度不同
+4. **测试不同平台**：在不同性能的设备上测试 LOD 设置
+5. **配合 Unity 的 Quality Settings**：可以考虑在 Quality Settings 中根据质量级别设置不同的 LOD
+
+**注意事项：**
+
+- LOD 值只是过滤条件之一，Unity 还会考虑其他兼容性因素（平台、渲染管线等）
+- LOD 是基于 SubShader 的，不是基于 Pass 的
+- 如果不设置 LOD，SubShader 的默认 LOD 值是无限大（总是可用）
+- LOD 值越大，表示着色器越复杂、质量越高
 [↑ 返回目录](#目录-table-of-contents)
 
 ## 3. 材质系统深入
@@ -1134,5 +1479,11 @@ public partial class CameraRenderer
 - [Unity 官方文档 - MaterialPropertyBlock](https://docs.unity3d.com/ScriptReference/MaterialPropertyBlock.html)
 - [Unity 官方文档 - Render Queue](https://docs.unity3d.com/Manual/SL-SubShaderTags.html)
 - [Catlike Coding - Custom SRP 教程](https://catlikecoding.com/unity/tutorials/custom-srp)
+
+[↑ 返回目录](#目录-table-of-contents)
+
+## TODO
+
+- [Shader 优化](https://docs.unity3d.com/Manual/SL-ShaderPerformance.html)
 
 [↑ 返回目录](#目录-table-of-contents)
