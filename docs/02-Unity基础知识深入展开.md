@@ -10,36 +10,36 @@
   - [1.3 CullingResults 和视锥剔除](#13-cullingresults-和视锥剔除)
   - [1.4 DrawRenderers 的参数详解](#14-drawrenderers-的参数详解)
 - [2. 着色器相关基础](#2-着色器相关基础)
-  - [2.1 ShaderTagId vs Shader 关键字](#21-shadertagid-vs-shader-关键字)
-  - [2.2 LightMode 标签系统](#22-lightmode-标签系统)
-  - [2.3 SRPDefaultUnlit 默认行为](#23-srpdefaultunlit-默认行为)
-  - [2.4 传统内置管线的标签](#24-传统内置管线的标签)
-  - [2.5 Shader 和 SubShader 的选择机制](#25-shader-和-subshader-的选择机制)
-  - [2.6 Queue 标签和渲染顺序](#26-queue-标签和渲染顺序)
-  - [2.7 RenderType 标签的作用](#27-rendertype-标签的作用)
-  - [2.8 Shader LOD（细节层次）](#28-shader-lod细节层次)
+  - [2.1 Shader Object 的结构层次](#21-shader-object-的结构层次)
+  - [2.2 SubShader 级别的属性和标签](#22-subshader-级别的属性和标签)
+    - [2.2.1 Queue 标签和渲染顺序](#221-queue-标签和渲染顺序)
+    - [2.2.2 RenderType 标签](#222-rendertype-标签)
+    - [2.2.3 RenderPipeline 标签](#223-renderpipeline-标签)
+    - [2.2.4 Shader LOD（细节层次）](#224-shader-lod细节层次)
+  - [2.3 Pass 级别的属性和标签](#23-pass-级别的属性和标签)
+    - [2.3.1 LightMode 标签系统](#231-lightmode-标签系统)
+    - [2.3.2 ShaderTagId 的作用](#232-shadertagid-的作用)
+    - [2.3.3 SRPDefaultUnlit 默认行为](#233-srpdefaultunlit-默认行为)
+    - [2.3.4 传统内置管线的标签](#234-传统内置管线的标签)
+  - [2.4 Shader 和 SubShader 的选择机制](#24-shader-和-subshader-的选择机制)
 - [3. 材质系统深入](#3-材质系统深入)
   - [3.1 Material 资源 vs MaterialInstance](#31-material-资源-vs-materialinstance)
   - [3.2 MaterialPropertyBlock 和 PerRendererData](#32-materialpropertyblock-和-perrendererdata)
   - [3.3 属性覆盖机制](#33-属性覆盖机制)
   - [3.4 共享材质 vs 实例材质的内存考量](#34-共享材质-vs-实例材质的内存考量)
-- [4. 渲染队列系统](#4-渲染队列系统)
-  - [4.1 RenderQueue 数值范围](#41-renderqueue-数值范围)
-  - [4.2 Queue 的分类](#42-queue-的分类)
-  - [4.3 队列与深度测试的关系](#43-队列与深度测试的关系)
-- [5. 排序和批处理](#5-排序和批处理)
-  - [5.1 SortingCriteria 的选项](#51-sortingcriteria-的选项)
-  - [5.2 静态批处理 vs 动态批处理](#52-静态批处理-vs-动态批处理)
-  - [5.3 GPU Instancing](#53-gpu-instancing)
-  - [5.4 SRP Batcher 的工作原理](#54-srp-batcher-的工作原理)
-- [6. 编辑器相关](#6-编辑器相关)
-  - [6.1 Partial Class 的使用](#61-partial-class-的使用)
-  - [6.2 Conditional Compilation（条件编译）](#62-conditional-compilation条件编译)
-  - [6.3 Editor-only 功能的设计模式](#63-editor-only-功能的设计模式)
-- [7. 性能考量](#7-性能考量)
-  - [7.1 Draw Call 的优化](#71-draw-call-的优化)
-  - [7.2 命令缓冲区的合理使用](#72-命令缓冲区的合理使用)
-  - [7.3 上下文提交的时机](#73-上下文提交的时机)
+- [4. 排序和批处理](#4-排序和批处理)
+  - [4.1 SortingCriteria 的选项](#41-sortingcriteria-的选项)
+  - [4.2 静态批处理 vs 动态批处理](#42-静态批处理-vs-动态批处理)
+  - [4.3 GPU Instancing](#43-gpu-instancing)
+  - [4.4 SRP Batcher 的工作原理](#44-srp-batcher-的工作原理)
+- [5. 编辑器相关](#5-编辑器相关)
+  - [5.1 Partial Class 的使用](#51-partial-class-的使用)
+  - [5.2 Conditional Compilation（条件编译）](#52-conditional-compilation条件编译)
+  - [5.3 Editor-only 功能的设计模式](#53-editor-only-功能的设计模式)
+- [6. 性能考量](#6-性能考量)
+  - [6.1 Draw Call 的优化](#61-draw-call-的优化)
+  - [6.2 命令缓冲区的合理使用](#62-命令缓冲区的合理使用)
+  - [6.3 上下文提交的时机](#63-上下文提交的时机)
 - [参考资源](#参考资源)
 
 ---
@@ -204,301 +204,63 @@ void DrawRenderers(
 
 ## 2. 着色器相关基础
 
-### 2.1 ShaderTagId vs Shader 关键字
+### 2.1 Shader Object 的结构层次
 
-**ShaderTagId（着色器标签 ID）：**
+Unity 的 Shader Object 采用层级结构，理解这个结构对于正确使用和调试着色器至关重要：
 
-- 用于标识着色器的 **Pass 标签**（如 `LightMode`）
-- 告诉渲染管线在什么时候使用哪个 Pass
-- 在 `ShaderLab` 的 `Pass Tags` 中定义
-
-```shader
-Pass
-{
-    Tags { "LightMode"="SRPDefaultUnlit" }
-    // ...
-}
+```text
+Shader "Custom/MyShader"          // Shader Object（最外层）
+├─ Properties                      // 着色器属性声明（在 Material Inspector 中显示）
+│  ├─ _MainTex ("Main Texture", 2D) = "white" {}
+│  └─ _Color ("Color", Color) = (1,1,1,1)
+│
+├─ SubShader 0                    // 第一个 SubShader（最高优先级）
+│  ├─ Tags { "Queue"="Geometry", "RenderType"="Opaque" }  // SubShader 级别标签
+│  ├─ LOD 300                     // SubShader 级别属性
+│  ├─ Pass 0                      // Pass（渲染通道）
+│  │  └─ Tags { "LightMode"="SRPDefaultUnlit" }  // Pass 级别标签
+│  ├─ Pass 1                      // 另一个 Pass
+│  │  └─ Tags { "LightMode"="ShadowCaster" }
+│  └─ ...
+│
+├─ SubShader 1                    // 第二个 SubShader（备选）
+│  └─ ...
+│
+└─ Fallback "Legacy Shaders/Diffuse"  // 如果所有 SubShader 都不兼容
 ```
 
-**Shader 关键字（Keywords）：**
+**层级关系：**
 
-- 用于控制着色器的编译变体
-- 在运行时通过 `Material.EnableKeyword()` 启用
-- 用于实现条件编译（如 `#ifdef`）
-
-```hlsl
-#pragma multi_compile _ DIRECTIONAL_LIGHT
-#if defined(DIRECTIONAL_LIGHT)
-    // 方向光相关代码
-#endif
-```
+1. **Shader Object**：顶层容器，包含所有 SubShader 和全局属性
+2. **SubShader**：针对不同平台或渲染管线的实现，包含 SubShader 级别的 Tags 和属性
+3. **Pass**：实际的渲染指令集合，包含 Pass 级别的 Tags 和渲染状态
 
 **关键区别：**
 
-| 特性 | ShaderTagId | Shader Keywords |
-|------|-------------|----------------|
-| 用途 | 标识 Pass | 控制编译变体 |
-| 定义位置 | Pass Tags | #pragma 指令 |
-| 运行时控制 | 由渲染管线控制 | 由 Material 控制 |
-| 数量限制 | 无（但有限制） | 有数量限制 |
+| 特性 | SubShader 级别 | Pass 级别 |
+|------|---------------|----------|
+| **Tags 示例** | `Queue`, `RenderType`, `RenderPipeline` | `LightMode` |
+| **属性示例** | `LOD` | 无属性（只有 Tags 和渲染状态） |
+| **作用范围** | 影响整个 SubShader 中的所有 Pass | 只影响单个 Pass |
+| **定义位置** | `SubShader { Tags { ... } }` | `Pass { Tags { ... } }` |
 
-### 2.2 LightMode 标签系统
+**重要概念：**
 
-`LightMode` 标签是着色器 Pass 最重要的标签之一，用于告诉渲染管线在哪个渲染阶段使用该 Pass。
+- **SubShader 级别的属性**：应用于该 SubShader 的所有 Pass，例如 `Queue` 决定渲染顺序，`RenderPipeline` 决定兼容性
+- **Pass 级别的属性**：只应用于单个 Pass，例如 `LightMode` 决定该 Pass 在哪个渲染阶段被使用
 
-**SRP 中的 LightMode 值：**
+理解这个层级结构后，我们可以更清晰地组织着色器的相关内容。
 
-1. **SRPDefaultUnlit**
-   - 默认的无光照 Pass
-   - 如果 Pass 没有声明 `LightMode`，默认使用此值
-   - 用于不受光照影响的对象
+[↑ 返回目录](#目录-table-of-contents)
 
-2. **其他常见值（URP/HDRP 中）：**
-   - `UniversalForward`：前向渲染的主 Pass
-   - `ShadowCaster`：阴影投射 Pass
-   - `DepthOnly`：仅深度 Pass
-   - `Meta`：光照贴图烘焙 Pass
+### 2.2 SubShader 级别的属性和标签
 
-**在当前项目中的使用：**
-
-```9:9:Assets/Custom RP/Runtime/CameraRenderer.cs
-    private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
-```
-
-这告诉渲染管线只渲染带有 `SRPDefaultUnlit` 标签的 Pass（或未声明 LightMode 的 Pass）。
-
-### 2.3 SRPDefaultUnlit 默认行为
-
-**重要特性：**
-
-1. **隐式识别**
-   - 如果着色器 Pass 没有显式声明 `LightMode`，Unity SRP 会将其视为 `SRPDefaultUnlit`
-   - 这在 Frame Debugger 中显示为 `LightMode: -`
-
-2. **向后兼容**
-   - 允许旧着色器在没有修改的情况下在 SRP 中工作
-   - 简化了从内置管线迁移的过程
-
-3. **默认匹配**
-   - 当使用 `ShaderTagId("SRPDefaultUnlit")` 创建 `DrawingSettings` 时
-   - 会渲染所有显式声明 `SRPDefaultUnlit` 的 Pass
-   - **以及**所有未声明 `LightMode` 的 Pass
-
-### 2.4 传统内置管线的标签
-
-内置渲染管线使用不同的 Pass 标签系统：
-
-```16:28:Assets/Custom RP/Runtime/CameraRenderer.Editor.cs
-    static ShaderTagId[] legacyShaderTagIds = {
-        new ShaderTagId("Always"),
-        new ShaderTagId("ForwardBase"),
-        new ShaderTagId("ForwardAdd"),
-        new ShaderTagId("Deferred"),
-        new ShaderTagId("ShadowCaster"),
-        // TODO1 打开绘制失效
-        //new ShaderTagId("MotionVectors"),
-        new ShaderTagId("Vertex"),
-        new ShaderTagId("VertexLMRGBM"),
-        new ShaderTagId("VertexLM"),
-        new ShaderTagId("Meta")
-    };
-```
-
-**常见内置管线标签：**
-
-- **ForwardBase**：前向渲染的基础 Pass（主方向光）
-- **ForwardAdd**：前向渲染的附加 Pass（其他光源）
-- **Deferred**：延迟渲染 Pass
-- **ShadowCaster**：阴影投射 Pass
-- **Always**：总是渲染的 Pass
-- **Meta**：光照贴图烘焙 Pass
-
-**处理不支持的着色器：**
-
-```31:49:Assets/Custom RP/Runtime/CameraRenderer.Editor.cs
-    static Material errorMaterial;
-    private partial void DrawUnsupportedShaders()
-    {
-        if (errorMaterial == null)
-        {
-            errorMaterial = new Material(Shader.Find("Hidden/InternalErrorShader"));
-        }
-
-        var drawingSettings = new DrawingSettings(legacyShaderTagIds[0], new SortingSettings(camera))
-        {
-            overrideMaterial = errorMaterial
-        };
-        for (int index=1; index<legacyShaderTagIds.Length; index++)
-        {
-            drawingSettings.SetShaderPassName(index, legacyShaderTagIds[index]);
-        }
-
-        var filterSettings = FilteringSettings.defaultValue;
-        context.DrawRenderers(cullingResults, ref drawingSettings, ref filterSettings);
-    }
-```
-
-使用 `overrideMaterial` 将所有不支持的着色器替换为错误材质（粉红色），便于在编辑器中识别问题。
-
-### 2.5 Shader 和 SubShader 的选择机制
-
-当渲染一个物体时，Unity 需要从 Shader Object 中选择合适的 SubShader 和 Pass。理解这个选择机制对于调试着色器问题和优化渲染性能至关重要。
-
-**Shader Object 的结构：**
-
-```text
-Shader "Custom/MyShader"          // Shader Object
-├─ SubShader 0                    // 第一个 SubShader（最高优先级）
-│  ├─ Pass 0
-│  ├─ Pass 1
-│  └─ ...
-├─ SubShader 1                    // 第二个 SubShader（备选）
-│  ├─ Pass 0
-│  └─ ...
-├─ SubShader 2                    // 第三个 SubShader（备选）
-│  └─ ...
-└─ Fallback "Legacy Shaders/Diffuse"  // 如果所有 SubShader 都不兼容
-   └─ SubShader 0                 // Fallback Shader 的 SubShader
-```
-
-**Unity 选择 SubShader 的过程：**
-
-根据 [Unity 官方文档](https://docs.unity3d.com/Manual/shader-loading.html#selecting-subshaders)，Unity 按照以下步骤选择 SubShader：
-
-**第一步：检查兼容性**
-
-Unity 会检查每个 SubShader 是否兼容：
-1. **平台硬件**：GPU 能力、特性级别
-2. **Shader LOD**：当前设置的 Shader 细节层次
-3. **渲染管线**：是否与当前使用的渲染管线兼容
-
-**第二步：按顺序搜索**
-
-Unity 按照以下顺序搜索兼容的 SubShader：
-
-```text
-1. 当前 Shader 的 SubShader（按在 Shader 中的顺序）
-   ├─ SubShader 0 → 检查兼容性
-   ├─ SubShader 1 → 检查兼容性（如果 SubShader 0 不兼容）
-   ├─ SubShader 2 → 检查兼容性（如果前面的都不兼容）
-   └─ ...
-
-2. Fallback Shader 的 SubShader（如果当前 Shader 没有兼容的）
-   └─ Fallback Shader 中的 SubShader（按顺序）
-```
-
-**第三步：选择第一个兼容的 SubShader**
-
-Unity 选择**第一个**兼容的 SubShader，然后在该 SubShader 中选择合适的 Pass。
-
-**实际示例：**
-
-```shader
-Shader "Custom/ExampleShader"
-{
-    // SubShader 0：针对现代 GPU（SRP 兼容）
-    SubShader
-    {
-        Tags { "RenderPipeline"="UniversalRenderPipeline" }
-        Pass
-        {
-            Tags { "LightMode"="SRPDefaultUnlit" }
-            // ...
-        }
-    }
-    
-    // SubShader 1：针对旧 GPU（内置管线兼容）
-    SubShader
-    {
-        Tags { "RenderPipeline"="" }  // 内置管线
-        Pass
-        {
-            Tags { "LightMode"="ForwardBase" }
-            // ...
-        }
-    }
-    
-    // Fallback：如果都不兼容，使用这个
-    Fallback "Legacy Shaders/Diffuse"
-}
-```
-
-**在不同渲染管线中的选择：**
-
-| 渲染管线 | 选择的 SubShader | 原因 |
-|---------|----------------|------|
-| URP/SRP | SubShader 0 | `RenderPipeline="UniversalRenderPipeline"` 标签匹配 |
-| 内置管线 | SubShader 1 | SubShader 0 不兼容（URP 标签），选择 SubShader 1 |
-| 不兼容的平台 | Fallback Shader | 所有 SubShader 都不兼容 |
-
-**Pass 的选择：**
-
-选择了 SubShader 后，Unity 会根据 `DrawingSettings` 中的 `ShaderTagId` 选择 Pass：
-
-```csharp
-// 在当前项目中
-var drawingSettings = new DrawingSettings(
-    new ShaderTagId("SRPDefaultUnlit"),  // 指定要使用的 Pass 标签
-    sortingSettings
-);
-```
-
-Unity 会：
-1. 在选定的 SubShader 中搜索带有 `LightMode="SRPDefaultUnlit"` 标签的 Pass
-2. 如果找到，使用该 Pass
-3. 如果没找到，尝试使用 SubShader 中的第一个 Pass（如果未声明 LightMode，会被视为 SRPDefaultUnlit）
-
-**Shader LOD 的影响：**
-
-Shader LOD（Level of Detail）会影响 SubShader 的选择。Unity 会根据当前的 LOD 值过滤掉 LOD 值过高的 SubShader。关于 LOD 的详细说明，请参考 [2.7 Shader LOD（细节层次）](#27-shader-lod细节层次)。
-
-**调试技巧：**
-
-1. **Frame Debugger**：查看实际使用的 Shader 和 Pass
-2. **Shader Inspector**：在 Unity 编辑器中查看编译后的 Shader 变体
-3. **Profiler 标记**：
-   - `Shader.ParseThreaded`：多线程解析 Shader
-   - `Shader.ParseMainThread`：主线程解析 Shader
-   - `Shader.MainThreadCleanup`：清理 Shader 变体
-
-**常见问题：**
-
-1. **物体显示为粉红色**：
-   - 说明没有找到兼容的 SubShader
-   - 检查 SubShader 的 Tags 是否与渲染管线匹配
-   - 检查 GPU 能力是否支持
-
-2. **使用了错误的 SubShader**：
-   - 检查 SubShader 的顺序（Unity 选择第一个兼容的）
-   - 检查 Shader LOD 设置
-
-3. **Fallback 被使用**：
-   - 说明当前 Shader 的所有 SubShader 都不兼容
-   - 考虑添加更通用的 SubShader 或调整 Tags
-
-**最佳实践：**
-
-1. **提供多个 SubShader**：为不同的平台和渲染管线提供兼容的 SubShader
-2. **合理排序**：将最常用、最兼容的 SubShader 放在前面
-3. **使用 Fallback**：始终提供 Fallback Shader 作为最后备选
-4. **明确标签**：为每个 SubShader 明确设置 `RenderPipeline` 等标签
-
-**在当前项目中的应用：**
-
-```9:9:Assets/Custom RP/Runtime/CameraRenderer.cs
-    private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
-```
-
-这告诉渲染管线只渲染带有 `SRPDefaultUnlit` 标签的 Pass。因此：
-- 物体使用的 Shader 必须有一个 SubShader 与自定义渲染管线兼容
-- 该 SubShader 中必须有一个 Pass 带有 `LightMode="SRPDefaultUnlit"` 标签（或未声明 LightMode）
-- 如果不符合条件，物体会在编辑器中显示为粉红色（如果实现了 `DrawUnsupportedShaders`）
-
-### 2.6 Queue 标签和渲染顺序
+#### 2.2.1 Queue 标签和渲染顺序
 
 `Queue` 标签是 SubShader 中最重要的标签之一，它决定了物体的渲染顺序。理解渲染队列对于实现正确的透明效果、优化性能和控制渲染流程至关重要。
 
-#### 什么是 Render Queue？
+**什么是 Render Queue？**
+>>>>>>> Stashed changes
 
 **Render Queue（渲染队列）本质上是一个整数值（int），范围通常是 0-5000**，而不是枚举类型。Unity 使用这个值来决定物体的渲染顺序：**队列值越小，越先渲染**。
 
@@ -927,7 +689,7 @@ A: Material 可能已经有了自定义的 renderQueue 值。将 `material.rende
 
 [↑ 返回目录](#目录-table-of-contents)
 
-### 2.7 RenderType 标签的作用
+#### 2.2.2 RenderType 标签
 
 `RenderType` 标签用于对对象进行分类，通常用于后处理或替换着色器：
 
@@ -938,17 +700,225 @@ Tags {
 }
 ```
 
+**设计目的：**
+
+`RenderType` 标签的主要设计目的是为不同类型的渲染对象提供分类标识，使得渲染管线可以根据对象的类型进行特定的处理或优化。这个标签在 Unity 的渲染系统中起到了以下关键作用：
+
+1. **对象分类**：提供统一的分类系统，让所有着色器都能标识自己渲染的对象类型
+2. **着色器替换支持**：为 Camera 的 Shader Replacement 功能提供匹配依据
+3. **后处理系统集成**：后处理效果可以根据 RenderType 选择性地处理不同类型的对象
+4. **调试和可视化**：开发工具可以根据 RenderType 进行特定的可视化渲染
+
 **常见 RenderType 值：**
-- `Opaque`：不透明对象
-- `Transparent`：透明对象
-- `Cutout`：透明度裁剪对象
-- `Background`：背景对象
 
-**用途：**
-- 后处理系统可以根据 `RenderType` 选择不同的处理方式
-- 替换着色器（Replacement Shaders）可以根据 `RenderType` 替换着色器
+Unity 内置着色器使用以下标准值（遵循 Unity 的命名约定，有助于与系统功能兼容）：
 
-### 2.8 Shader LOD（细节层次）
+| RenderType 值 | 说明 | 典型用途 |
+|--------------|------|---------|
+| `Opaque` | 不透明对象 | 大部分不透明着色器（如 Standard、Diffuse、Normal、Terrain） |
+| `Transparent` | 透明对象 | 半透明着色器（如 Transparent、Particles、Font） |
+| `TransparentCutout` | 透明度裁剪对象 | 镂空着色器（如 Transparent/Cutout、Two-sided vegetation） |
+| `Background` | 背景对象 | 天空盒着色器（Skybox） |
+| `Overlay` | 叠加效果 | UI 效果、光环（Halo）、光晕（Flare）着色器 |
+
+**自定义 RenderType 值：**
+
+你也可以定义自己的 RenderType 值，但建议保持与 Unity 内置值的语义一致，以便与第三方工具兼容：
+
+```shader
+// 自定义 RenderType 值
+Tags { "RenderType"="CustomOpaque" }
+Tags { "RenderType"="Effect" }
+Tags { "RenderType"="Water" }
+```
+
+**Shader Replacement 的工作原理：**
+
+Shader Replacement 是 Unity 提供的功能，允许在运行时将所有或特定类型的对象替换为指定的着色器。这在内置渲染管线和 SRP 中都可以使用。
+
+**API 使用：**
+
+```csharp
+// 方式 1：SetReplacementShader（持续替换，直到调用 ResetReplacementShader）
+camera.SetReplacementShader(replacementShader, "RenderType");
+camera.ResetReplacementShader();  // 恢复正常渲染
+
+// 方式 2：RenderWithShader（仅渲染一次，不改变相机的默认行为）
+camera.RenderWithShader(replacementShader, "RenderType");
+```
+
+**工作原理（详细步骤）：**
+
+当调用 `Camera.SetReplacementShader(replacementShader, "RenderType")` 时，Unity 的渲染流程会发生以下变化：
+
+```text
+渲染每个对象时：
+1. 检查对象的原始 Shader 是否有 "RenderType" 标签
+   ├─ 如果没有 → 跳过渲染该对象
+   └─ 如果有 → 继续步骤 2
+
+2. 获取原始 Shader 的 RenderType 值（例如 "Opaque"）
+
+3. 在 replacementShader 中搜索 SubShader：
+   ├─ 查找 SubShader，其 Tags 中包含 "RenderType"="Opaque"
+   ├─ 如果找到匹配的 SubShader → 使用该 SubShader 渲染
+   └─ 如果没找到 → 跳过渲染该对象
+
+4. 如果 replacementTag 为空字符串：
+   └─ 所有对象都使用 replacementShader 渲染（忽略 RenderType）
+```
+
+**替换着色器的结构：**
+
+替换着色器必须为每种要替换的 RenderType 提供对应的 SubShader：
+
+```shader
+Shader "Custom/ReplacementShader"
+{
+    // 替换 "RenderType"="Opaque" 的对象
+    SubShader
+    {
+        Tags { "RenderType"="Opaque" }
+        Pass
+        {
+            // 替换着色器的渲染逻辑（例如只渲染深度、法线等）
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            // ...
+            ENDCG
+        }
+    }
+    
+    // 替换 "RenderType"="Transparent" 的对象
+    SubShader
+    {
+        Tags { "RenderType"="Transparent" }
+        Pass
+        {
+            // 透明对象的替换逻辑
+            // ...
+        }
+    }
+    
+    // 如果没有匹配的 SubShader，对象不会被渲染
+}
+```
+
+**在 SRP 中的使用：**
+
+在 Scriptable Render Pipeline 中，Shader Replacement 仍然可以使用，但需要手动处理。SRP 不像内置管线那样自动支持 `SetReplacementShader`，需要在渲染循环中实现：
+
+```csharp
+// 在 CameraRenderer 中实现
+public partial class CameraRenderer
+{
+    private void DrawVisibleObjects()
+    {
+        // 如果设置了替换着色器
+        if (replacementShader != null && replacementTag != null)
+        {
+            // 使用替换着色器绘制
+            var drawingSettings = new DrawingSettings(
+                new ShaderTagId("SRPDefaultUnlit"),
+                new SortingSettings(camera)
+            )
+            {
+                overrideShader = replacementShader,
+                overrideShaderPassIndex = 0
+            };
+            
+            // 根据 RenderType 过滤对象（需要自定义实现）
+            var filteringSettings = new FilteringSettings(RenderQueueRange.all);
+            context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
+        }
+        else
+        {
+            // 正常渲染
+        }
+    }
+}
+```
+
+**注意事项：**
+
+1. **性能影响**：Shader Replacement 会增加渲染开销，因为它需要额外的 Shader 查找和匹配
+2. **兼容性**：确保替换着色器为所有需要的 RenderType 提供了 SubShader
+3. **材质属性**：替换着色器可能无法访问原始材质的某些属性（取决于替换着色器的实现）
+4. **SRP 支持**：在 SRP 中，Shader Replacement 的支持程度取决于渲染管线的实现
+
+**最佳实践：**
+
+1. **遵循命名约定**：使用 Unity 标准的 RenderType 值（Opaque、Transparent 等）
+2. **提供完整的替换**：为替换着色器提供所有可能遇到的 RenderType 的 SubShader
+3. **及时重置**：在不需要时调用 `ResetReplacementShader()` 恢复正常渲染
+4. **性能考虑**：只在需要时启用替换着色器（如调试模式、特殊效果）
+
+#### 2.2.3 RenderPipeline 标签
+
+`RenderPipeline` 标签用于指定该 SubShader 兼容的渲染管线，这是 SRP 中最重要的 SubShader 级别标签之一。
+
+**定义方式：**
+
+```shader
+SubShader
+{
+    // SRP 兼容标签（URP）
+    Tags { "RenderPipeline"="UniversalRenderPipeline" }
+    
+    Pass
+    {
+        // ...
+    }
+}
+```
+
+**常见值：**
+
+- `"RenderPipeline"="UniversalRenderPipeline"`：兼容 URP
+- `"RenderPipeline"="HDRenderPipeline"`：兼容 HDRP
+- `"RenderPipeline"=""` 或不设置：兼容内置渲染管线
+
+**工作原理：**
+
+Unity 在选择 SubShader 时，会检查 `RenderPipeline` 标签是否与当前使用的渲染管线匹配：
+- 如果匹配，该 SubShader 会被考虑
+- 如果不匹配，该 SubShader 会被跳过，继续查找下一个 SubShader
+
+**实际示例：**
+
+```shader
+Shader "Custom/ExampleShader"
+{
+    // SubShader 0：针对 URP
+    SubShader
+    {
+        Tags { "RenderPipeline"="UniversalRenderPipeline" }
+        Pass
+        {
+            Tags { "LightMode"="UniversalForward" }
+            // ...
+        }
+    }
+    
+    // SubShader 1：针对内置管线
+    SubShader
+    {
+        Tags { "RenderPipeline"="" }  // 或省略此标签
+        Pass
+        {
+            Tags { "LightMode"="ForwardBase" }
+            // ...
+        }
+    }
+}
+```
+
+**在当前项目中的应用：**
+
+我们的自定义渲染管线不要求特定的 `RenderPipeline` 标签（因为没有设置），因此可以兼容没有设置此标签的 Shader。
+
+#### 2.2.4 Shader LOD（细节层次）
 
 Shader LOD（Level of Detail）是一种优化技术，允许 Unity 根据当前设置自动选择不同复杂度的 SubShader。这类似于 3D 模型的 LOD，但应用于着色器。
 
@@ -1137,6 +1107,223 @@ Shader "Custom/AdaptiveShader"
 - LOD 是基于 SubShader 的，不是基于 Pass 的
 - 如果不设置 LOD，SubShader 的默认 LOD 值是无限大（总是可用）
 - LOD 值越大，表示着色器越复杂、质量越高
+
+[↑ 返回目录](#目录-table-of-contents)
+
+### 2.3 Pass 级别的属性和标签
+
+Pass 级别的标签和属性只影响单个 Pass，不会影响整个 SubShader。
+
+#### 2.3.1 LightMode 标签系统
+
+`LightMode` 标签是着色器 Pass 最重要的标签之一，用于告诉渲染管线在哪个渲染阶段使用该 Pass。
+
+**SRP 中的 LightMode 值：**
+
+1. **SRPDefaultUnlit**
+   - 默认的无光照 Pass
+   - 如果 Pass 没有声明 `LightMode`，默认使用此值
+   - 用于不受光照影响的对象
+
+2. **其他常见值（URP/HDRP 中）：**
+   - `UniversalForward`：前向渲染的主 Pass
+   - `ShadowCaster`：阴影投射 Pass
+   - `DepthOnly`：仅深度 Pass
+   - `Meta`：光照贴图烘焙 Pass
+
+**在当前项目中的使用：**
+
+```9:9:Assets/Custom RP/Runtime/CameraRenderer.cs
+    private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+```
+
+这告诉渲染管线只渲染带有 `SRPDefaultUnlit` 标签的 Pass（或未声明 LightMode 的 Pass）。
+
+#### 2.3.2 ShaderTagId 的作用
+
+**ShaderTagId（着色器标签 ID）：**
+
+- 用于标识着色器的 **Pass 标签**（如 `LightMode`）
+- 告诉渲染管线在什么时候使用哪个 Pass
+- 在 `ShaderLab` 的 `Pass Tags` 中定义
+
+```shader
+Pass
+{
+    Tags { "LightMode"="SRPDefaultUnlit" }
+    // ...
+}
+```
+
+**Shader 关键字（Keywords）的区别：**
+
+Shader Keywords 用于控制着色器的编译变体，在运行时通过 `Material.EnableKeyword()` 启用，用于实现条件编译（如 `#ifdef`）：
+
+```hlsl
+#pragma multi_compile _ DIRECTIONAL_LIGHT
+#if defined(DIRECTIONAL_LIGHT)
+    // 方向光相关代码
+#endif
+```
+
+**关键区别：**
+
+| 特性 | ShaderTagId | Shader Keywords |
+|------|-------------|----------------|
+| 用途 | 标识 Pass | 控制编译变体 |
+| 定义位置 | Pass Tags | #pragma 指令 |
+| 运行时控制 | 由渲染管线控制 | 由 Material 控制 |
+| 数量限制 | 无（但有限制） | 有数量限制 |
+
+#### 2.3.3 SRPDefaultUnlit 默认行为
+
+**重要特性：**
+
+1. **隐式识别**
+   - 如果着色器 Pass 没有显式声明 `LightMode`，Unity SRP 会将其视为 `SRPDefaultUnlit`
+   - 这在 Frame Debugger 中显示为 `LightMode: -`
+
+2. **向后兼容**
+   - 允许旧着色器在没有修改的情况下在 SRP 中工作
+   - 简化了从内置管线迁移的过程
+
+3. **默认匹配**
+   - 当使用 `ShaderTagId("SRPDefaultUnlit")` 创建 `DrawingSettings` 时
+   - 会渲染所有显式声明 `SRPDefaultUnlit` 的 Pass
+   - **以及**所有未声明 `LightMode` 的 Pass
+
+#### 2.3.4 传统内置管线的标签
+
+内置渲染管线使用不同的 Pass [标签系统](https://docs.unity3d.com/2022.3/Documentation/Manual/shader-predefined-pass-tags-built-in.html)：
+
+```16:28:Assets/Custom RP/Runtime/CameraRenderer.Editor.cs
+    static ShaderTagId[] legacyShaderTagIds = {
+        new ShaderTagId("Always"),
+        new ShaderTagId("ForwardBase"),
+        new ShaderTagId("ForwardAdd"),
+        new ShaderTagId("Deferred"),
+        new ShaderTagId("ShadowCaster"),
+        // TODO1 打开绘制失效
+        //new ShaderTagId("MotionVectors"),
+        new ShaderTagId("Vertex"),
+        new ShaderTagId("VertexLMRGBM"),
+        new ShaderTagId("VertexLM"),
+        new ShaderTagId("Meta")
+    };
+```
+
+**常见内置管线标签：**
+
+- **ForwardBase**：前向渲染的基础 Pass（主方向光）
+- **ForwardAdd**：前向渲染的附加 Pass（其他光源）
+- **Deferred**：延迟渲染 Pass
+- **ShadowCaster**：阴影投射 Pass
+- **Always**：总是渲染的 Pass
+- **Meta**：光照贴图烘焙 Pass
+
+**处理不支持的着色器：**
+
+```31:49:Assets/Custom RP/Runtime/CameraRenderer.Editor.cs
+    static Material errorMaterial;
+    private partial void DrawUnsupportedShaders()
+    {
+        if (errorMaterial == null)
+        {
+            errorMaterial = new Material(Shader.Find("Hidden/InternalErrorShader"));
+        }
+
+        var drawingSettings = new DrawingSettings(legacyShaderTagIds[0], new SortingSettings(camera))
+        {
+            overrideMaterial = errorMaterial
+        };
+        for (int index=1; index<legacyShaderTagIds.Length; index++)
+        {
+            drawingSettings.SetShaderPassName(index, legacyShaderTagIds[index]);
+        }
+
+        var filterSettings = FilteringSettings.defaultValue;
+        context.DrawRenderers(cullingResults, ref drawingSettings, ref filterSettings);
+    }
+```
+
+使用 `overrideMaterial` 将所有不支持的着色器替换为错误材质（粉红色），便于在编辑器中识别问题。
+
+[↑ 返回目录](#目录-table-of-contents)
+
+### 2.4 Shader 和 SubShader 的选择机制
+
+当渲染一个物体时，Unity 需要从 Shader Object 中选择合适的 SubShader 和 Pass。理解这个选择机制对于调试着色器问题和优化渲染性能至关重要。
+
+**Unity 选择 SubShader 的过程：**
+
+根据 [Unity 官方文档](https://docs.unity3d.com/Manual/shader-loading.html#selecting-subshaders)，Unity 按照以下步骤选择 SubShader：
+
+**第一步：检查兼容性**
+
+Unity 会检查每个 SubShader 是否兼容：
+1. **平台硬件**：GPU 能力、特性级别
+2. **Shader LOD**：当前设置的 Shader 细节层次（见 [2.2.4 Shader LOD](#224-shader-lod细节层次)）
+3. **渲染管线**：`RenderPipeline` 标签是否匹配（见 [2.2.3 RenderPipeline 标签](#223-renderpipeline-标签)）
+
+**第二步：按顺序搜索**
+
+Unity 按照以下顺序搜索兼容的 SubShader：
+1. 当前 Shader 的 SubShader（按在 Shader 中的顺序）
+2. Fallback Shader 的 SubShader（如果当前 Shader 没有兼容的）
+
+**第三步：选择第一个兼容的 SubShader**
+
+Unity 选择**第一个**兼容的 SubShader，然后在该 SubShader 中选择合适的 Pass。
+
+**Pass 的选择：**
+
+选择了 SubShader 后，Unity 会根据 `DrawingSettings` 中的 `ShaderTagId` 选择 Pass（见 [2.3.1 LightMode 标签系统](#231-lightmode-标签系统)）：
+
+```csharp
+// 在当前项目中
+var drawingSettings = new DrawingSettings(
+    new ShaderTagId("SRPDefaultUnlit"),  // 指定要使用的 Pass 标签
+    sortingSettings
+);
+```
+
+Unity 会：
+1. 在选定的 SubShader 中搜索带有 `LightMode="SRPDefaultUnlit"` 标签的 Pass
+2. 如果找到，使用该 Pass
+3. 如果没找到，尝试使用 SubShader 中的第一个 Pass（如果未声明 LightMode，会被视为 SRPDefaultUnlit）
+
+**调试技巧：**
+
+1. **Frame Debugger**：查看实际使用的 Shader 和 Pass
+2. **Shader Inspector**：在 Unity 编辑器中查看编译后的 Shader 变体
+3. **Profiler 标记**：
+   - `Shader.ParseThreaded`：多线程解析 Shader
+   - `Shader.ParseMainThread`：主线程解析 Shader
+   - `Shader.MainThreadCleanup`：清理 Shader 变体
+
+**常见问题：**
+
+1. **物体显示为粉红色**：
+   - 说明没有找到兼容的 SubShader
+   - 检查 SubShader 的 Tags 是否与渲染管线匹配
+   - 检查 GPU 能力是否支持
+
+2. **使用了错误的 SubShader**：
+   - 检查 SubShader 的顺序（Unity 选择第一个兼容的）
+   - 检查 Shader LOD 设置
+
+3. **Fallback 被使用**：
+   - 说明当前 Shader 的所有 SubShader 都不兼容
+   - 考虑添加更通用的 SubShader 或调整 Tags
+
+**最佳实践：**
+
+1. **提供多个 SubShader**：为不同的平台和渲染管线提供兼容的 SubShader
+2. **合理排序**：将最常用、最兼容的 SubShader 放在前面
+3. **使用 Fallback**：始终提供 Fallback Shader 作为最后备选
+4. **明确标签**：为每个 SubShader 明确设置 `RenderPipeline` 等标签
+
+>>>>>>> Stashed changes
 [↑ 返回目录](#目录-table-of-contents)
 
 ## 3. 材质系统深入
@@ -1604,74 +1791,9 @@ renderer.SetPropertyBlock(mpb);
 
 [↑ 返回目录](#目录-table-of-contents)
 
-## 4. 渲染队列系统
+## 4. 排序和批处理
 
-### 4.1 RenderQueue 数值范围
-
-Unity 的渲染队列使用数值范围来定义渲染顺序：
-
-| 队列范围 | 数值 | 说明 |
-|---------|------|------|
-| Background | 1000 | 背景对象（如天空盒） |
-| Geometry | 2000 | 不透明几何体（默认） |
-| AlphaTest | 2450 | 透明度裁剪对象 |
-| Transparent | 3000 | 透明对象 |
-| Overlay | 4000 | 叠加效果（如 UI） |
-
-**在代码中使用：**
-
-```csharp
-// 设置材质的渲染队列
-material.renderQueue = 3000;  // 透明队列
-
-// 或使用预定义值
-material.renderQueue = (int)RenderQueue.Transparent;
-```
-
-### 4.2 Queue 的分类
-
-**RenderQueueRange 的使用：**
-
-```57:57:Assets/Custom RP/Runtime/CameraRenderer.cs
-        var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
-```
-
-**预定义的队列范围：**
-
-- `RenderQueueRange.opaque`：< 2500（不透明对象）
-- `RenderQueueRange.transparent`：>= 2500（透明对象）
-- `RenderQueueRange.all`：所有队列
-
-**自定义范围：**
-
-```csharp
-var range = new RenderQueueRange(2000, 3000);  // 从 2000 到 3000
-```
-
-### 4.3 队列与深度测试的关系
-
-**不透明对象（< 2500）：**
-- 从前往后渲染（基于深度）
-- 启用深度写入（ZWrite On）
-- 深度测试：LessEqual（更近或相等时渲染）
-- 不进行 Alpha 混合
-
-**透明对象（>= 2500）：**
-- 从后往前渲染（基于深度，反向）
-- 禁用深度写入（ZWrite Off）
-- 深度测试：LessEqual（但只读取，不写入）
-- 进行 Alpha 混合
-
-**为什么透明对象要从后往前渲染？**
-- Alpha 混合需要正确的颜色叠加顺序
-- 从后往前确保后面的对象先渲染，前面的对象后渲染
-- 这样才能得到正确的透明效果
-
-[↑ 返回目录](#目录-table-of-contents)
-
-## 5. 排序和批处理
-
-### 5.1 SortingCriteria 的选项
+### 4.1 SortingCriteria 的选项
 
 `SortingSettings` 使用 `SortingCriteria` 枚举来决定排序方式：
 
@@ -1698,7 +1820,7 @@ var range = new RenderQueueRange(2000, 3000);  // 从 2000 到 3000
         drawingSettings.sortingSettings = sortingSettings;
 ```
 
-### 5.2 静态批处理 vs 动态批处理
+### 4.2 静态批处理 vs 动态批处理
 
 **静态批处理（Static Batching）：**
 - 在构建时或编辑器中将静态对象合并
@@ -1723,7 +1845,7 @@ var range = new RenderQueueRange(2000, 3000);  // 从 2000 到 3000
 
 Unity 会自动尝试批处理，无需额外代码。
 
-### 5.3 GPU Instancing
+### 4.3 GPU Instancing
 
 GPU Instancing 允许使用单个 Draw Call 渲染多个相同网格的实例。
 
@@ -1740,7 +1862,7 @@ GPU Instancing 允许使用单个 Draw Call 渲染多个相同网格的实例。
 - GPU Instancing：可以处理大量对象（数千个）
 - 动态批处理：对象数量有限（通常 < 几百个）
 
-### 5.4 SRP Batcher 的工作原理
+### 4.4 SRP Batcher 的工作原理
 
 SRP Batcher 是 SRP 特有的优化功能，可以大幅减少 Draw Call。
 
@@ -1768,9 +1890,9 @@ SRP Batcher 是 SRP 特有的优化功能，可以大幅减少 Draw Call。
 
 [↑ 返回目录](#目录-table-of-contents)
 
-## 6. 编辑器相关
+## 5. 编辑器相关
 
-### 6.1 Partial Class 的使用
+### 5.1 Partial Class 的使用
 
 使用 `partial class` 将类定义分散到多个文件中：
 
@@ -1790,7 +1912,7 @@ public partial class CameraRenderer
 - 条件编译：编辑器代码可以只在编辑器中编译
 - 清晰性：明确区分哪些功能只在编辑器中可用
 
-### 6.2 Conditional Compilation（条件编译）
+### 5.2 Conditional Compilation（条件编译）
 
 使用预处理指令控制代码编译：
 
@@ -1808,7 +1930,7 @@ public partial class CameraRenderer
 - 提高发布版本性能
 - 移除编辑器专用代码（如 Gizmos、调试工具）
 
-### 6.3 Editor-only 功能的设计模式
+### 5.3 Editor-only 功能的设计模式
 
 **Partial Method 模式：**
 
@@ -1832,9 +1954,9 @@ public partial class CameraRenderer
 
 [↑ 返回目录](#目录-table-of-contents)
 
-## 7. 性能考量
+## 6. 性能考量
 
-### 7.1 Draw Call 的优化
+### 6.1 Draw Call 的优化
 
 **Draw Call 是什么？**
 - CPU 向 GPU 发送的一个渲染命令
@@ -1856,7 +1978,7 @@ public partial class CameraRenderer
    - 根据距离使用不同细节级别的网格
    - 减少远距离对象的顶点数
 
-### 7.2 命令缓冲区的合理使用
+### 6.2 命令缓冲区的合理使用
 
 **最佳实践：**
 
@@ -1880,7 +2002,7 @@ public partial class CameraRenderer
    };
    ```
 
-### 7.3 上下文提交的时机
+### 6.3 上下文提交的时机
 
 **Submit() 的重要性：**
 
