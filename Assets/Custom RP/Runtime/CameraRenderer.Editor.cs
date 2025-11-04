@@ -4,8 +4,6 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// TODO2 不使用errormaterial, 3个红色的球的表现不一致
-
 public partial class CameraRenderer
 {
     partial void PrepareBuffer();
@@ -46,7 +44,6 @@ public partial class CameraRenderer
     {
         if (camera.cameraType == CameraType.SceneView)
         {
-            // TODO3
             ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
         }
     }
@@ -55,6 +52,7 @@ public partial class CameraRenderer
     {
         if (errorMaterial == null)
         {
+            // 不指定errormaterial, 会使用材质的默认属性绘制
             errorMaterial = new Material(Shader.Find("Hidden/InternalErrorShader"));
         }
 

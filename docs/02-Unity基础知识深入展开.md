@@ -36,10 +36,17 @@
   - [5.1 Partial Class 的使用](#51-partial-class-的使用)
   - [5.2 Conditional Compilation（条件编译）](#52-conditional-compilation条件编译)
   - [5.3 Editor-only 功能的设计模式](#53-editor-only-功能的设计模式)
-- [6. 性能考量](#6-性能考量)
-  - [6.1 Draw Call 的优化](#61-draw-call-的优化)
-  - [6.2 命令缓冲区的合理使用](#62-命令缓冲区的合理使用)
-  - [6.3 上下文提交的时机](#63-上下文提交的时机)
+- [6. Canvas UI 渲染模式与 SRP 集成](#6-canvas-ui-渲染模式与-srp-集成)
+  - [6.1 三种渲染模式概述](#61-三种渲染模式概述)
+  - [6.2 渲染流程对比](#62-渲染流程对比)
+  - [6.3 与 SRP 的集成关系](#63-与-srp-的集成关系)
+  - [6.4 EmitWorldGeometryForSceneView 的作用](#64-emitworldgeometryforsceneview-的作用)
+  - [6.5 性能对比分析](#65-性能对比分析)
+  - [6.6 使用场景建议](#66-使用场景建议)
+- [7. 性能考量](#7-性能考量)
+  - [7.1 Draw Call 的优化](#71-draw-call-的优化)
+  - [7.2 命令缓冲区的合理使用](#72-命令缓冲区的合理使用)
+  - [7.3 上下文提交的时机](#73-上下文提交的时机)
 - [参考资源](#参考资源)
 
 ---
@@ -1952,11 +1959,457 @@ public partial class CameraRenderer
 
 在运行时代码中调用，但在非编辑器环境中，这些调用会被优化掉。
 
+**DrawGizmos 的详细说明：**
+
+在编辑器代码中，`DrawGizmos` 方法实现了 Gizmos 的绘制：
+
+```50:57:Assets/Custom RP/Runtime/CameraRenderer.Editor.cs
+    private partial void DrawGizmos()
+    {
+        if (Handles.ShouldRenderGizmos())
+        {
+            context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+            context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+        }
+    }
+```
+
+**为什么需要绘制两次？**
+
+Unity 的 Gizmos 系统分为两个阶段，以支持不同的绘制需求：
+
+1. **`GizmoSubset.PreImageEffects`（后处理前绘制）**
+   - 在图像后处理效果（如 Bloom、Color Grading 等）应用**之前**绘制
+   - 适用于需要与场景物体一起受后处理影响的 Gizmos
+   - 例如：物体边界框、碰撞体形状等调试图形
+
+2. **`GizmoSubset.PostImageEffects`（后处理后绘制）**
+   - 在图像后处理效果应用**之后**绘制
+   - 适用于需要在最终画面上叠加显示的 Gizmos
+   - 例如：UI 辅助线、屏幕空间标记等不会被后处理影响的图形
+
+**渲染管线的执行顺序：**
+
+```text
+渲染流程：
+1. 不透明物体渲染
+2. 天空盒渲染
+3. 透明物体渲染
+4. DrawGizmos(camera, PreImageEffects)  ← 后处理前
+5. [后处理效果应用]（如果有）
+6. DrawGizmos(camera, PostImageEffects) ← 后处理后
+7. UI 渲染
+```
+
+**camera 参数的作用：**
+
+`camera` 参数指定了用于绘制 Gizmos 的相机，作用包括：
+
+1. **确定绘制视角**：Gizmos 会根据该相机的视角和设置进行绘制
+2. **视锥剔除**：只绘制在该相机视锥内的 Gizmos
+3. **相机设置应用**：应用相机的渲染设置（如 Clear Flags、Culling Mask 等）
+
+**为什么需要 camera 参数？**
+
+在 SRP 中，渲染管线会遍历所有相机并分别渲染。每个相机可能有不同的设置和视角，因此需要明确指定为哪个相机绘制 Gizmos。
+
+**实际应用场景：**
+
+- **PreImageEffects**：场景调试工具（如物体的包围盒、路径线）
+- **PostImageEffects**：屏幕空间标记（如鼠标点击位置、目标指示器）
+
+**注意事项：**
+
+- Gizmos 主要用于编辑器中的 Scene 视图调试
+- 在 Game 视图中，Gizmos 通常不显示（除非启用了 Gizmos 显示选项）
+- 这两个调用是必需的，Unity 会根据 Gizmo 的定义自动选择在哪个阶段绘制
+
 [↑ 返回目录](#目录-table-of-contents)
 
-## 6. 性能考量
+## 6. Canvas UI 渲染模式与 SRP 集成
 
-### 6.1 Draw Call 的优化
+在 Unity 中，Canvas UI 系统提供了三种渲染模式：Screen Space - Overlay、Screen Space - Camera 和 World Space。理解这些模式如何与 SRP（Scriptable Render Pipeline）集成，对于优化性能和正确实现 UI 渲染至关重要。
+
+### 6.1 三种渲染模式概述
+
+Unity Canvas 提供了三种渲染模式，每种模式都有不同的特点和适用场景：
+
+#### Screen Space - Overlay（覆盖模式）
+
+**特点：**
+- Canvas 直接渲染到屏幕，不依赖相机
+- 不经过 SRP 渲染管线
+- UI 始终显示在最上层，覆盖所有内容
+- 不受相机设置影响
+
+**配置方式：**
+```
+Canvas → Render Mode → Screen Space - Overlay
+```
+
+#### Screen Space - Camera（相机模式）
+
+**特点：**
+- Canvas 渲染在指定相机前方的平面上
+- **经过 SRP 渲染管线**（作为 3D 对象渲染）
+- 支持深度测试，可以被 3D 对象遮挡
+- 可以参与相机的后处理效果
+- 距离变化时自动缩放补偿（视觉大小不变）
+
+**配置方式：**
+```
+Canvas → Render Mode → Screen Space - Camera
+Canvas → Render Camera → 指定相机
+```
+
+#### World Space（世界空间模式）
+
+**特点：**
+- Canvas 作为场景中的 3D 对象存在
+- **完全经过 SRP 渲染管线**（作为普通 3D 对象）
+- 支持透视效果（距离变化时会变小）
+- 可以与场景对象自由交互
+- 支持光照和阴影（如果启用）
+
+**配置方式：**
+```
+Canvas → Render Mode → World Space
+```
+
+### 6.2 渲染流程对比
+
+#### Screen Space - Overlay 渲染流程
+
+```
+Screen Space - Overlay 渲染流程：
+┌─────────────────────────────────────┐
+│ 1. Unity 内置 UI 系统                 │ ← 独立于 SRP
+│    └─ 屏幕空间坐标转换               │
+│    └─ 简单的 2D 变换                │
+├─────────────────────────────────────┤
+│ 2. 直接绘制到屏幕缓冲区               │ ← 无中间步骤
+│    └─ 无需深度缓冲                   │
+│    └─ 无需投影矩阵                   │
+│    └─ 无需视锥剔除                   │
+└─────────────────────────────────────┘
+```
+
+**关键点：**
+- 不调用 `CameraRenderer.Render()`
+- 不经过 `Cull()`、`Setup()`、`DrawVisibleObjects()` 等步骤
+- Unity 内置系统直接处理，性能最优
+
+#### Screen Space - Camera 渲染流程
+
+```
+Screen Space - Camera 渲染流程：
+┌─────────────────────────────────────┐
+│ 1. 经过 SRP 渲染管线                │ ← 调用你的 CameraRenderer
+│    └─ CustomRenderPipeline.Render() │
+│       └─ CameraRenderer.Render()   │
+│          ├─ PrepareForSceneWindow() │
+│          ├─ Cull()                  │ ← 视锥剔除
+│          ├─ Setup()                 │ ← 相机设置
+│          └─ DrawVisibleObjects()    │ ← 绘制 Canvas（作为 3D 对象）
+├─────────────────────────────────────┤
+│ 2. 相机投影矩阵计算                  │ ← 需要投影矩阵
+│    └─ context.SetupCameraProperties()│
+├─────────────────────────────────────┤
+│ 3. 深度测试设置                      │ ← 需要深度缓冲
+│    └─ 读写深度缓冲                   │
+├─────────────────────────────────────┤
+│ 4. 在相机前方平面渲染                │ ← 3D 空间渲染
+│    └─ 自动缩放补偿（保持视觉大小）   │
+└─────────────────────────────────────┘
+```
+
+**关键点：**
+- 经过完整的 SRP 渲染流程
+- 需要视锥剔除、相机设置、深度测试
+- 自动缩放补偿：距离变化时 Canvas 自动缩放，保持屏幕上的视觉大小不变
+
+#### World Space 渲染流程
+
+```
+World Space 渲染流程：
+┌─────────────────────────────────────┐
+│ 1. 作为普通 3D 对象                 │ ← 完全走 3D 管线
+│    └─ CustomRenderPipeline.Render() │
+│       └─ CameraRenderer.Render()   │
+│          ├─ Cull()                  │ ← 视锥剔除
+│          ├─ Setup()                 │ ← 相机设置
+│          └─ DrawVisibleObjects()    │ ← 绘制 Canvas
+├─────────────────────────────────────┤
+│ 2. 视锥剔除                         │ ← 需要剔除
+│    └─ 检查 Canvas 是否在视野内      │
+├─────────────────────────────────────┤
+│ 3. 深度排序                         │ ← 复杂的排序
+│    └─ 与场景对象混合                │
+├─────────────────────────────────────┤
+│ 4. 投影变换                         │ ← 3D 到 2D 变换
+│    └─ 支持透视效果                  │
+│    └─ 距离变化时会变小              │
+└─────────────────────────────────────┘
+```
+
+**关键点：**
+- 作为普通 3D 对象完全走 SRP 流程
+- 支持完整的 3D 特性（透视、光照、阴影）
+- 距离变化时会产生透视效果（符合预期）
+
+### 6.3 与 SRP 的集成关系
+
+#### 在你的代码中的体现
+
+查看 `CameraRenderer.Render()` 方法：
+
+```28:52:Assets/Custom RP/Runtime/CameraRenderer.cs
+    public void Render(ScriptableRenderContext context, Camera camera, bool enableDynamicBatching, bool useGPUInstancing, ShadowSettings shadowSettings)
+    {
+        this.context = context;
+        this.camera = camera;
+
+        PrepareBuffer();
+        PrepareForSceneWindow();
+
+        // Cull和GPU无关 TODO5 放在Setup后面, Profile很奇怪
+        if (!Cull(shadowSettings.maxDistance))
+            return;
+
+        buffer.BeginSample(SamplerName);
+        ExecuteBuffer();
+        lighting.Setup(context, cullingResults, shadowSettings);
+        buffer.EndSample(SamplerName);
+        Setup();
+
+        DrawVisibleObjects(enableDynamicBatching, useGPUInstancing);
+        DrawUnsupportedShaders();
+        DrawGizmos();
+
+        lighting.Cleanup();
+        Submit();
+    }
+```
+
+**不同模式的处理：**
+
+| Canvas 模式 | 是否经过 SRP | 调用的方法 | 说明 |
+|------------|------------|----------|------|
+| Screen Space - Overlay | ❌ 否 | 无 | Unity 内置系统处理，不调用 `CameraRenderer.Render()` |
+| Screen Space - Camera | ✅ 是 | `Render()` → `DrawVisibleObjects()` | 作为 3D 对象经过 SRP，需要剔除和设置 |
+| World Space | ✅ 是 | `Render()` → `DrawVisibleObjects()` | 作为普通 3D 对象经过 SRP |
+
+#### 渲染队列的作用
+
+Canvas UI 使用 Overlay 队列（4000）：
+
+```319:345:docs/02-Unity基础知识深入展开.md
+#### 完整的队列范围图谱
+
+```text
+渲染队列完整范围：
+
+    0                    1000        2000    2450    3000        4000        5000
+    │                     │           │       │       │           │           │
+    ├─────────────────────┼───────────┼───────┼───────┼───────────┼───────────┤
+         (很少使用)     Background  Geometry AlphaTest Transparent Overlay (极少)
+                           ↓           ↓       ↓       ↓           ↓
+                        天空盒     不透明物体  镂空   透明物体    UI/特效
+
+
+详细分区说明：
+
+0-999:      未定义区域（理论可用，但不推荐）
+1000:       Background（天空盒、背景物体）
+1001-1999:  Background 后的特殊物体
+2000:       Geometry（不透明物体的标准值）
+2001-2449:  不透明物体的微调范围
+2450:       AlphaTest（Alpha 裁剪物体，如树叶）
+2451-2999:  AlphaTest 到 Transparent 之间的过渡
+3000:       Transparent（透明物体的标准值）
+3001-3999:  透明物体的微调范围
+4000:       Overlay（UI、全屏特效）
+4001-5000:  最晚渲染的特殊效果
+```
+```
+
+**Overlay 队列的特点：**
+- 最后渲染，覆盖所有内容
+- Screen Space - Overlay 模式使用此队列，但不经过 SRP
+- Screen Space - Camera 和 World Space 模式也使用此队列，但经过 SRP
+
+### 6.4 EmitWorldGeometryForSceneView 的作用
+
+`EmitWorldGeometryForSceneView` 是 Unity Editor 与 SRP 集成的关键方法，用于在 Scene View 中渲染编辑器 UI。
+
+#### 代码位置
+
+```43:49:Assets/Custom RP/Runtime/CameraRenderer.Editor.cs
+    partial void PrepareForSceneWindow()
+    {
+        if (camera.cameraType == CameraType.SceneView)
+        {
+            ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
+        }
+    }
+```
+
+#### 作用说明
+
+`EmitWorldGeometryForSceneView` 会将 Unity 编辑器的世界空间 UI 几何体发射到 SRP 渲染上下文：
+
+#### 为什么只有 Scene View 需要？
+
+设计的目的和实现的区别暂时没有理解！
+
+### 6.5 性能对比分析
+
+#### 性能开销对比
+
+**核心区别：Screen Space - Overlay 性能最优**
+
+| 操作 | Screen Space - Overlay | Screen Space - Camera | World Space |
+|------|----------------------|---------------------|-------------|
+| 经过 SRP | ❌ 否 | ✅ 是 | ✅ 是 |
+| 视锥剔除 | ❌ 无 | ✅ 需要 | ✅ 需要 |
+| 深度缓冲读写 | ❌ 无 | ✅ 需要 | ✅ 需要 |
+| 投影矩阵计算 | ❌ 无 | ✅ 需要 | ✅ 需要 |
+| 相机设置 | ❌ 无 | ✅ 需要 | ✅ 需要 |
+| GPU 带宽 | 最低 | 中等 | 最高 |
+| Draw Calls | 最少（批处理友好） | 中等 | 最多（难以批处理） |
+| CPU 开销 | 最低 | 中等 | 最高 |
+
+#### 为什么 Overlay 模式性能最好？
+
+**1. 不经过 3D 渲染管线**
+```csharp
+// Overlay 模式：不调用
+CameraRenderer.Render()  // ❌ 不调用
+  ├─ Cull()              // ❌ 不需要
+  ├─ Setup()             // ❌ 不需要
+  └─ DrawVisibleObjects() // ❌ 不需要
+```
+
+**2. 无需深度缓冲**
+- 不读取深度缓冲
+- 不写入深度缓冲
+- 直接覆盖绘制，节省 GPU 带宽
+
+**3. 简单的 2D 渲染**
+- 屏幕空间坐标变换（简单的 2D 平移和缩放）
+- 无需投影矩阵计算
+- 无需复杂的 3D 排序
+
+**4. 批处理友好**
+- UI 元素可以更容易地批处理
+- 不需要考虑深度排序
+- 简单的 2D 排序算法
+
+**5. 独立渲染系统**
+- Unity 内置 UI 系统高度优化
+- 不受自定义渲染管线影响
+- 专门的 UI 渲染优化
+
+#### 实际性能数据（估算）
+
+假设渲染 100 个 UI 元素：
+
+```
+Screen Space - Overlay：
+- Draw Calls: ~5-10（批处理后）
+- CPU 时间: ~0.1ms
+- GPU 时间: ~0.5ms
+- 内存带宽: ~10MB/s
+
+Screen Space - Camera：
+- Draw Calls: ~10-20（批处理后）
+- CPU 时间: ~0.5ms（包含剔除）
+- GPU 时间: ~1.5ms（包含深度测试）
+- 内存带宽: ~50MB/s（深度缓冲）
+
+World Space：
+- Draw Calls: ~20-50（更难批处理）
+- CPU 时间: ~1.0ms（包含剔除和排序）
+- GPU 时间: ~3.0ms（包含完整 3D 渲染）
+- 内存带宽: ~100MB/s（深度缓冲 + 光照）
+```
+
+### 6.6 使用场景建议
+
+#### Screen Space - Overlay（推荐用于大多数 UI）
+
+**适用场景：**
+- ✅ HUD（血条、分数、时间）
+- ✅ 菜单系统
+- ✅ 对话框
+- ✅ 性能敏感的场景
+- ✅ 不需要与 3D 场景混合的 UI
+
+**不适用场景：**
+- ❌ UI 需要被 3D 物体遮挡
+- ❌ UI 需要参与后处理效果
+
+#### Screen Space - Camera
+
+**适用场景：**
+- ✅ UI 需要被 3D 物体遮挡
+- ✅ UI 需要参与后处理效果（如模糊、色调调整）
+- ✅ UI 需要深度测试
+- ✅ 需要与场景对象混合的 UI
+
+**不适用场景：**
+- ❌ 性能敏感的场景（如果可以用 Overlay）
+- ❌ 只需要简单 UI 的场景
+
+#### World Space
+
+**适用场景：**
+- ✅ UI 作为 3D 世界的一部分（如游戏中的显示屏、告示牌）
+- ✅ 需要透视效果
+- ✅ VR/AR 应用中的 UI
+- ✅ 需要与场景对象自由交互的 UI
+- ✅ 需要光照和阴影效果的 UI
+
+**不适用场景：**
+- ❌ 性能敏感的场景
+- ❌ 只需要 2D UI 的场景
+
+#### 选择决策树
+
+```
+需要 UI 吗？
+├─ 需要与 3D 场景混合吗？
+│  ├─ 是 → Screen Space - Camera
+│  └─ 否 → Screen Space - Overlay ⭐（推荐）
+│
+└─ UI 是 3D 世界的一部分吗？
+   ├─ 是 → World Space
+   └─ 否 → Screen Space - Overlay ⭐（推荐）
+```
+
+#### 最佳实践
+
+1. **默认使用 Overlay 模式**
+   - 除非有特殊需求，否则使用 Overlay 模式
+   - 性能最优，实现最简单
+
+2. **需要深度测试时使用 Camera 模式**
+   - 当 UI 需要被 3D 对象遮挡时
+   - 当 UI 需要参与后处理时
+
+3. **需要 3D 效果时使用 World Space**
+   - 当 UI 需要作为场景的一部分时
+   - 当需要透视、光照等 3D 效果时
+
+4. **性能优先**
+   - 在满足需求的前提下，选择性能最好的模式
+   - Overlay > Camera > World Space（性能从高到低）
+
+[↑ 返回目录](#目录-table-of-contents)
+
+## 7. 性能考量
+
+### 7.1 Draw Call 的优化
 
 **Draw Call 是什么？**
 - CPU 向 GPU 发送的一个渲染命令
@@ -1978,7 +2431,7 @@ public partial class CameraRenderer
    - 根据距离使用不同细节级别的网格
    - 减少远距离对象的顶点数
 
-### 6.2 命令缓冲区的合理使用
+### 7.2 命令缓冲区的合理使用
 
 **最佳实践：**
 
@@ -2002,7 +2455,7 @@ public partial class CameraRenderer
    };
    ```
 
-### 6.3 上下文提交的时机
+### 7.3 上下文提交的时机
 
 **Submit() 的重要性：**
 
