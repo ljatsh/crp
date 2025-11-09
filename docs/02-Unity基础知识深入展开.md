@@ -1854,20 +1854,31 @@ Unity 会自动尝试批处理，无需额外代码。
 
 ### 4.3 GPU Instancing
 
-GPU Instancing 允许使用单个 Draw Call 渲染多个相同网格的实例。
+> **详细文档**：请参考 [[UnityInstancing]] - Unity GPU 实例化 文档，其中包含：
+> - GPU Instancing 的工作原理深入分析
+> - 预处理后的代码和宏展开说明
+> - 驱动层实现机制（基于Metal调试截图）
+> - 实例数量限制的计算方法
+> - 性能优化要点和最佳实践
+> - 与SRP Batcher的对比
+
+**快速概览：**
+
+GPU Instancing 允许使用单个 Draw Call 渲染多个相同网格的实例，每个实例可以有不同的 Transform 和 Per-Instance 属性。
+
+**核心优势：**
+- ✅ 大幅减少 DrawCall（1000个物体 → 1个DrawCall）
+- ✅ CPU开销极低（一次调用）
+- ✅ GPU并行处理（SIMD执行）
 
 **启用条件：**
 - 使用相同的网格和材质
 - 着色器支持 GPU Instancing（`#pragma multi_compile_instancing`）
 - 通过 `Graphics.DrawMeshInstanced()` 或 Material 的 `enableInstancing` 属性
 
-**优势：**
-- 大幅减少 Draw Call（如渲染 1000 棵树只需要 1 个 Draw Call）
-- 性能提升明显
-
 **与动态批处理的区别：**
-- GPU Instancing：可以处理大量对象（数千个）
-- 动态批处理：对象数量有限（通常 < 几百个）
+- GPU Instancing：可以处理大量对象（数千个），受Constant Buffer大小限制
+- 动态批处理：对象数量有限（通常 < 几百个），顶点数 < 300
 
 ### 4.4 SRP Batcher 的工作原理
 
@@ -2231,6 +2242,10 @@ Frame Debugger验证步骤：
 ```
 
 **与GPU Instancing的关系：**
+
+> **详细对比**：请参考 [[UnityInstancing]] 文档中的"与SRP Batcher的对比"章节。
+
+**核心要点：**
 ```
 ⚠️ GPU Instancing与SRP Batcher不兼容！
 - 启用GPU Instancing会使GameObject不兼容SRP Batcher
