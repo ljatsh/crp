@@ -14,7 +14,16 @@ NC='\033[0m' # No Color
 # 配置路径
 SOURCE_DIR="$HOME/dev/GitHub/crp/docs/ShaderLibrary"
 ICLOUD_BASE="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
-TARGET_DIR="$ICLOUD_BASE/Obsidian/ShaderLibrary"
+
+# 检查是否已存在 Obsidian 文件夹
+OBSIDIAN_DIR="$ICLOUD_BASE/Obsidian"
+if [ -d "$OBSIDIAN_DIR" ]; then
+    echo -e "${GREEN}✓${NC} 检测到已存在的 Obsidian 文件夹: $OBSIDIAN_DIR"
+    TARGET_DIR="$OBSIDIAN_DIR/ShaderLibrary"
+else
+    echo -e "${YELLOW}⚠${NC} 未找到已存在的 Obsidian 文件夹，将创建: $OBSIDIAN_DIR"
+    TARGET_DIR="$OBSIDIAN_DIR/ShaderLibrary"
+fi
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Unity Shader Library 同步脚本${NC}"
@@ -43,6 +52,11 @@ echo -e "${GREEN}✓${NC} iCloud Drive 检查通过"
 echo ""
 
 # 创建目标目录（如果不存在）
+# 注意：只创建 ShaderLibrary 子目录，不创建 Obsidian 父目录（如果已存在）
+if [ ! -d "$OBSIDIAN_DIR" ]; then
+    mkdir -p "$OBSIDIAN_DIR"
+    echo -e "${YELLOW}⚠${NC} 已创建 Obsidian 文件夹: $OBSIDIAN_DIR"
+fi
 mkdir -p "$TARGET_DIR"
 echo -e "${GREEN}✓${NC} 目标目录已准备: $TARGET_DIR"
 echo ""
