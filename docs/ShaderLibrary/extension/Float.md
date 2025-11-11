@@ -5,7 +5,8 @@ created: 2025-11-05
 related:
   - "[[Common]]"
   - "[[PrecisionOptimization]]"
-  - "[[数学基础]]"
+  - "[[MathBasics]]"
+  - "[[VectorOperations]]"
 ---
 
 # 浮点数（Float）
@@ -17,8 +18,8 @@ related:
 **相关主题**：
 - [[Common]] - 核心函数库
 - [[PrecisionOptimization]] - 着色器优化技巧
-- [[数学基础]] - GPU 数学运算
-- [[向量运算]] - 向量和矩阵计算
+- [[MathBasics]] - GPU 数学运算
+- [[VectorOperations]] - 向量和矩阵计算
 
 ## IEEE 754 浮点数标准
 
