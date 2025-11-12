@@ -485,6 +485,8 @@ float4x4 id = k_identity4x4;  // Unity 常量
 
 ## 11. 齐次坐标 (Homogeneous Coordinates)
 
+> **详细内容**：关于齐次坐标的引入背景、数学含义和图形学应用，参见 [[HomogeneousCoordinates]]。
+
 ### 11.1 定义
 
 齐次坐标使用 4D 向量表示 3D 点或方向：

@@ -531,167 +531,24 @@ Unity 统一将深度缓冲区存储为 `[0, 1]` 范围，但含义不同：
 
 理解透视投影矩阵是理解 ClipSpace 和 w 分量的关键。
 
-##### 齐次坐标与 ClipSpace
-
-ClipSpace 不是简单的 `[-1, 1]` 范围，而是**齐次坐标空间（4D）**，表示为 `(x, y, z, w)`。
-
 **关键概念**：
+- ClipSpace 不是简单的 `[-1, 1]` 范围，而是**齐次坐标空间（4D）**，表示为 `(x, y, z, w)`
 - ClipSpace 中的坐标是齐次坐标，必须除以 w 才能得到真正的 3D 坐标
-- w 分量存储了视图空间的深度信息
+- w 分量存储了视图空间的深度信息：`w_clip = -z_view`
 - 只有除以 w 之后，坐标才真正在 `[-1, 1]` 范围内（标准 NDC）
 
-##### 标准透视投影矩阵
+**透视除法的实现**：
 
-**右手坐标系下的透视投影矩阵**（简化形式）：
-
-```
-P = [ f/aspect  0      0           0      ]
-    [ 0         f      0           0      ]
-    [ 0         0    (f+n)/(f-n)  -2fn/(f-n) ]
-    [ 0         0      -1         0      ]
-```
-
-其中：
-- `f` = far plane distance（远裁剪面距离）
-- `n` = near plane distance（近裁剪面距离）
-- `aspect` = aspect ratio（宽高比）
-- `f` = `1 / tan(fov/2)`（FOV 相关的缩放因子）
-
-**关键观察**：矩阵的第 4 行是 `[0, 0, -1, 0]`，这意味着：
-- `w_clip = -z_view`
-
-##### w 分量的含义
-
-在透视投影中，w 分量存储的是**视图空间的深度（取负）**：
-
-```
-w_clip = -z_view
-```
-
-**示例**：
-- 近平面：`z_view = -n`，所以 `w_clip = -(-n) = n`（正值）
-- 远平面：`z_view = -f`，所以 `w_clip = -(-f) = f`（正值）
-- 视锥体内的点：`w_clip` 在 `[n, f]` 范围内
-
-##### 为什么必须除以 w？
-
-###### 1. 齐次坐标到笛卡尔坐标的转换
-
-齐次坐标 `(x, y, z, w)` 表示的是 3D 点 `(x/w, y/w, z/w)`。只有除以 w 后，才能得到真正的 3D 坐标。
-
-**数学定义**：
-```
-NDC_x = clip_x / clip_w
-NDC_y = clip_y / clip_w
-NDC_z = clip_z / clip_w
-```
-
-###### 2. 透视除法的数学意义
-
-透视除法实现了**透视效果**：
-- 远处的物体看起来更小（因为除以更大的 w）
-- 近处的物体看起来更大（因为除以更小的 w）
-
-**数学原理**：
-假设一个点在视图空间中：`positionVS = (10, 5, -20)`
-
-经过投影矩阵后：
-- `x_clip = 10 * f/aspect`（假设 = 200）
-- `y_clip = 5 * f`（假设 = 100）
-- `z_clip = ...`（深度相关）
-- `w_clip = -z_view = -(-20) = 20`
-
-**除以 w 之前**：
-- `x_clip = 200`（不在 `[-1, 1]` 范围内）
-- `y_clip = 100`（不在 `[-1, 1]` 范围内）
-
-**除以 w 之后**：
-- `NDC_x = 200 / 20 = 10`（如果 > 1，说明在视锥体外）
-- `NDC_y = 100 / 20 = 5`（如果 > 1，说明在视锥体外）
-
-对于视锥体内的点，除以 w 后会在 `[-1, 1]` 范围内。
-
-###### 3. 透视投影的几何意义
-
-透视投影模拟了人眼的视觉系统：
-- 平行线在远处会汇聚（消失点）
-- 距离越远，物体越小
-- 这些效果都是通过除以 w 实现的
-
-**几何解释**：
-```
-        Camera
-          |
-          |  (近平面)
-          |----|----
-          |    |    |
-          |    |    |  (远平面)
-          |----|----|
-          |    |    |
-          |    |    |
-```
-
-近处的物体在屏幕上的投影更大，远处的物体投影更小。这个缩放比例就是 `1/w`。
-
-##### Unity 中的实现
-
-看 `ComputeNormalizedDeviceCoordinatesWithZ` 的实现：
+在 `ComputeNormalizedDeviceCoordinatesWithZ` 中：
 
 ```hlsl
-float3 ComputeNormalizedDeviceCoordinatesWithZ(float3 position, float4x4 clipSpaceTransform = k_identity4x4)
-{
-    float4 positionCS = ComputeClipSpacePosition(position, clipSpaceTransform);
-    
-    #if UNITY_UV_STARTS_AT_TOP
-        positionCS.y = -positionCS.y; // Flip Y for D3D/Metal
-    #endif
-    
-    positionCS *= rcp(positionCS.w); // 透视除法
-    positionCS.xy = positionCS.xy * 0.5 + 0.5; // Transform to [0,1]
-    
-    return positionCS.xyz;
-}
+positionCS *= rcp(positionCS.w); // 透视除法
+positionCS.xy = positionCS.xy * 0.5 + 0.5; // Transform to [0,1]
 ```
 
-**步骤解析**：
-
-1. **`positionCS *= rcp(positionCS.w)`**：透视除法
-   - 等价于 `positionCS.xyz /= positionCS.w`
-   - 将齐次坐标转换为 3D 坐标
-   - 此时 `positionCS.xy` 在 `[-1, 1]` 范围内（标准 NDC）
-
-2. **`positionCS.xy = positionCS.xy * 0.5 + 0.5`**：映射到 Unity 的 `[0, 1]` NDC 范围
-   - `[-1, 1]` → `[0, 1]`
-   - Unity 使用非标准的 NDC 范围
-
-##### 正交投影的特殊情况
-
-对于正交投影：
-- 投影矩阵的第 4 行是 `[0, 0, 0, 1]`
-- `w = 1`（常数）
-- 除以 w 不会改变坐标值，但仍然需要这一步以保持一致性
-
-**正交投影矩阵**（简化形式）：
-```
-P = [ 1/aspect  0      0           0      ]
-    [ 0         1      0           0      ]
-    [ 0         0    -2/(f-n)  -(f+n)/(f-n) ]
-    [ 0         0      0         1      ]
-```
-
-注意第 4 行是 `[0, 0, 0, 1]`，所以 `w = 1`（常数）。
-
-##### 总结
-
-1. **ClipSpace 是齐次坐标空间（4D）**，不是简单的 `[-1, 1]`
-2. **w 分量存储视图空间的深度**：`w = -z_view`
-3. **必须除以 w 才能**：
-   - 将齐次坐标转换为 3D 坐标
-   - 实现透视效果
-   - 使坐标在 `[-1, 1]` 范围内（标准 NDC）
-4. **Unity 进一步将 `[-1, 1]` 映射到 `[0, 1]` 范围**
-
-这就是为什么代码中需要 `positionCS *= rcp(positionCS.w)` 的原因。
+**详细推导和数学原理**：
+- 关于透视投影矩阵的完整推导过程，包括坐标系定义、参数设置和详细步骤，参见 [[TransformationMatrices#透视投影矩阵]]
+- 关于齐次坐标的基础知识，参见 [[HomogeneousCoordinates]]
 
 #### NDC Space（标准化设备坐标）详解
 
