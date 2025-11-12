@@ -383,3 +383,100 @@ half3 debugColor = frac(value * 10.0);  // Amplify precision errors (放大精�
 - [Unity Shader Precision](https://docs.unity3d.com/Manual/SL-DataTypesAndPrecision.html) - Unity着色器精度文档
 - [Mobile GPU Precision](https://developer.nvidia.com/content/precision-performance-floating-point-and-ieee-754-compliance-nvidia-gpus) - 移动GPU精度文档
 
+## Error Analysis and Propagation: Systematic Preparation (误差分析和传播的系统准备)
+
+> [!todo] TODO: Systematic Learning Framework (系统学习框架)
+> 
+> To master error analysis and propagation, build a solid foundation through systematic learning (要掌握误差分析和传播，需要通过系统学习建立坚实基础). The following framework provides a comprehensive learning path (以下框架提供了全面的学习路径):
+
+### Core Knowledge Areas (核心知识领域)
+
+#### 1. Mathematics (数学基础)
+
+- **Taylor Expansion (泰勒展开)**: Understanding function approximation and error bounds (理解函数近似和误差界)
+  - First-order and higher-order approximations (一阶和高阶近似)
+  - Remainder terms and error estimation (余项和误差估计)
+  - Applications in numerical differentiation and integration (在数值微分和积分中的应用)
+
+- **Linear Algebra (线性代数)**: Matrix operations and their numerical properties (矩阵运算及其数值性质)
+  - Matrix condition numbers (矩阵条件数)
+  - Eigenvalue and eigenvector stability (特征值和特征向量稳定性)
+  - Singular value decomposition (SVD) (奇异值分解)
+
+- **Probability and Statistics (概率统计)**: Understanding random errors and uncertainty (理解随机误差和不确定性)
+  - Error distributions (误差分布)
+  - Statistical error propagation (统计误差传播)
+  - Monte Carlo methods for error estimation (蒙特卡洛误差估计方法)
+
+#### 2. System Knowledge (系统知识)
+
+- **IEEE 754 Standard (IEEE 754标准)**: Floating-point representation and arithmetic (浮点数表示和算术)
+  - Number formats (float, double, half) (数字格式)
+  - Rounding modes and exceptions (舍入模式和异常)
+  - Special values (NaN, Infinity) (特殊值)
+
+- **Computer Arithmetic (计算机算术)**: How operations are performed (运算如何执行)
+  - Floating-point operations (浮点运算)
+  - Rounding errors and their accumulation (舍入误差及其累积)
+  - Guard digits and extended precision (保护位和扩展精度)
+
+- **Hardware Characteristics (硬件特性)**: GPU and CPU specific behaviors (GPU和CPU特定行为)
+  - Fused multiply-add (FMA) operations (融合乘加运算)
+  - SIMD operations and precision (SIMD运算和精度)
+  - Platform-specific optimizations (平台特定优化)
+
+#### 3. Analysis Methods (分析方法)
+
+- **Error Propagation (误差传播)**: How errors accumulate through calculations (误差如何通过计算累积)
+  - Forward error analysis (前向误差分析)
+  - Backward error analysis (后向误差分析)
+  - Error propagation formulas (误差传播公式)
+
+- **Condition Numbers (条件数)**: Measuring problem sensitivity (测量问题敏感性)
+  - Matrix condition numbers (矩阵条件数)
+  - Function condition numbers (函数条件数)
+  - Ill-conditioned problems (病态问题)
+
+- **Stability Theory (稳定性理论)**: Algorithm numerical stability (算法数值稳定性)
+  - Forward stability (前向稳定性)
+  - Backward stability (后向稳定性)
+  - Mixed stability (混合稳定性)
+
+#### 4. Practical Skills (实践技能)
+
+- **Debugging Skills (调试技能)**: Identifying and diagnosing precision issues (识别和诊断精度问题)
+  - Visual debugging techniques (可视化调试技术)
+  - Precision visualization methods (精度可视化方法)
+  - Error tracking and logging (误差跟踪和日志记录)
+
+- **Verification Methods (验证方法)**: Ensuring correctness (确保正确性)
+  - Unit testing with tolerance (带容差的单元测试)
+  - Reference implementations (参考实现)
+  - Cross-platform validation (跨平台验证)
+
+- **Tool Usage (工具使用)**: Leveraging development tools (利用开发工具)
+  - Precision profilers (精度分析器)
+  - Numerical analysis libraries (数值分析库)
+  - GPU debugging tools (GPU调试工具)
+
+### Learning Path (学习路径)
+
+> [!tip] Recommended Approach (推荐方法)
+> 
+> Start from understanding floating-point numbers, then gradually deepen into algorithm stability analysis (从理解浮点数开始，逐步深入到算法稳定性分析). With this foundation, you can predict, diagnose, and solve various numerical precision problems (有了这些基础，你就能预见、诊断和解决各种数值精度问题)!
+
+**Suggested Learning Order (建议学习顺序)**:
+
+1. **Foundation (基础)**: IEEE 754 → Computer Arithmetic → Hardware Characteristics
+2. **Mathematics (数学)**: Linear Algebra → Taylor Expansion → Probability Statistics
+3. **Analysis (分析)**: Error Propagation → Condition Numbers → Stability Theory
+4. **Practice (实践)**: Debugging Skills → Verification Methods → Tool Usage
+
+### Key Concepts to Master (需要掌握的关键概念)
+
+- **Machine Epsilon (机器ε)**: The smallest representable difference (可表示的最小差值)
+- **Relative vs Absolute Error (相对误差 vs 绝对误差)**: When to use each (何时使用哪个)
+- **Cancellation Errors (抵消误差)**: When subtraction causes precision loss (减法何时导致精度损失)
+- **Algorithm Stability (算法稳定性)**: Why some algorithms are more robust (为什么某些算法更稳健)
+- **Conditioning (条件性)**: Problem sensitivity to input perturbations (问题对输入扰动的敏感性)
+
