@@ -106,6 +106,9 @@
 
 ### `CreateTangentToWorld(real3 normal, real3 tangent, real flipSign)`
 
+> [!info] TBN 矩阵详解
+> 关于 TBN 矩阵的详细定义、用途、构建方法和注意事项，参见 [[VectorOperations#12 TBN 矩阵]]。
+
 - **签名**：`real3x3 CreateTangentToWorld(real3 normal, real3 tangent, real flipSign)`
 - **功能**：创建从切线空间到世界空间的变换矩阵（TBN 矩阵）
 - **实现原理**：

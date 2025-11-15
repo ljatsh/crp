@@ -1071,27 +1071,27 @@ float ComputeTextureLOD(float2 uvdx, float2 uvdy, float2 scale, float bias = 0.0
 
 #### LOD 计算公式推导
 
-**步骤 1：计算 UV 导数的长度**
+##### 步骤 1：计算 UV 导数的长度
 
 ```hlsl
 float2 ddx_ = scale * uvdx;  // 缩放后的 X 方向导数
 float2 ddy_ = scale * uvdy;  // 缩放后的 Y 方向导数
 ```
 
-**步骤 2：计算导数的平方长度**
+##### 步骤 2：计算导数的平方长度
 
 ```hlsl
 float lenDxSqr = dot(ddx_, ddx_);  // |∂uv/∂x|²
 float lenDySqr = dot(ddy_, ddy_);  // |∂uv/∂y|²
 ```
 
-**步骤 3：取最大值**
+##### 步骤 3：取最大值
 
 ```hlsl
 float d = max(lenDxSqr, lenDySqr);  // max(|∂uv/∂x|², |∂uv/∂y|²)
 ```
 
-**步骤 4：计算 LOD**
+##### 步骤 4：计算 LOD
 
 ```hlsl
 float lod = 0.5 * log2(d) - bias;

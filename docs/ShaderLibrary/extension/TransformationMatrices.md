@@ -143,7 +143,7 @@ NDC 空间 (Normalized Device Coordinates) - (x/w, y/w, z/w)
 
 #### X 坐标的推导
 
-**步骤 1：相似三角形关系**
+##### 步骤 1：相似三角形关系
 
 考虑视图空间中的一个点 `P = (x_view, y_view, z_view)`，投影到近平面 `z = -n`：
 
@@ -171,7 +171,7 @@ x_proj / x_view = -n / z_view
 x_proj = -n * x_view / z_view
 ```
 
-**步骤 2：映射到 NDC 范围**
+##### 步骤 2：映射到 NDC 范围
 
 我们需要将 `x_proj` 从 `[-r, r]` 映射到 `[-1, 1]`：
 
@@ -194,7 +194,7 @@ NDC_x = (-n * x_view / z_view) / (n * tan(fovY/2) * aspect)
      = -x_view / (z_view * tan(fovY/2) * aspect)
 ```
 
-**步骤 3：使用齐次坐标**
+##### 步骤 3：使用齐次坐标
 
 我们希望：
 ```
@@ -220,20 +220,20 @@ NDC_x = x_clip / w_clip = (x_view / (tan(fovY/2) * aspect)) / (-z_view)
 
 类似地，Y 坐标的推导：
 
-**步骤 1：投影到近平面**
+##### 步骤 1：投影到近平面
 
 ```
 y_proj = -n * y_view / z_view
 ```
 
-**步骤 2：映射到 NDC**
+##### 步骤 2：映射到 NDC
 
 ```
 NDC_y = y_proj / t = (-n * y_view / z_view) / (n * tan(fovY/2))
      = -y_view / (z_view * tan(fovY/2))
 ```
 
-**步骤 3：使用齐次坐标**
+##### 步骤 3：使用齐次坐标
 
 设置：
 - `y_clip = y_view / tan(fovY/2)`
@@ -254,7 +254,7 @@ NDC_y = y_clip / w_clip = (y_view / tan(fovY/2)) / (-z_view)
 
 Z 坐标的推导更复杂，因为需要将深度范围 `[-f, -n]` 映射到 `[-1, 1]`。
 
-**步骤 1：线性映射**
+##### 步骤 1：线性映射
 
 我们希望找到一个线性函数 `z_clip = A * z_view + B`，使得：
 - 当 `z_view = -n` 时，`NDC_z = z_clip / w_clip = -1`
@@ -275,11 +275,15 @@ Z 坐标的推导更复杂，因为需要将深度范围 `[-f, -n]` 映射到 `[
 ```
 所以：`z_clip = f`
 
-**步骤 2：求解线性函数**
+##### 步骤 2：求解线性函数
 
 我们需要 `z_clip = A * z_view + B`，满足：
 - `z_clip(-n) = -n` → `A * (-n) + B = -n` → `-A*n + B = -n`
 - `z_clip(-f) = f` → `A * (-f) + B = f` → `-A*f + B = f`
+
+> **参考草稿笔记**：详细的推导过程可参考以下草稿笔记：
+> 
+> ![Z坐标推导草稿笔记](matrix_projection.png)
 
 解方程组：
 ```
